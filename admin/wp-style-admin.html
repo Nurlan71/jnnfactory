@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="ru"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>JNN Admin — WordPress Style</title>
+<script src="https://unpkg.com/@phosphor-icons/web"></script>
+<style>
+:root{--bg-sidebar:#1d2327;--bg-main:#f0f0f1;--bg-white:#fff;--accent:#72aee6;--text:#1d2327;--text-muted:#646970;--border:#dcdcde;--radius:6px;}
+*{box-sizing:border-box;margin:0;padding:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;}
+body{background:var(--bg-main);color:var(--text);display:flex;height:100vh;overflow:hidden;}
+
+/* Sidebar */
+.sidebar{width:260px;background:var(--bg-sidebar);color:#fff;display:flex;flex-direction:column;flex-shrink:0;transition:width .2s;}
+.sidebar.collapsed{width:56px;}
+.sidebar-header{padding:24px 16px;border-bottom:1px solid rgba(255,255,255,.06);}
+.logo{font-weight:700;font-size:18px;letter-spacing:-.02em;line-height:1.3;}
+.logo span{color:var(--accent);}
+.subtitle{font-size:11px;color:#8a9299;margin-top:4px;}
+
+.nav-section{margin-top:20px;padding:0 12px;}
+.nav-title{font-size:11px;text-transform:uppercase;color:#8a9299;padding:8px 8px 4px;letter-spacing:.04em;}
+.nav-item{display:flex;align-items:center;gap:14px;padding:10px 8px;border-radius:var(--radius);text-decoration:none;color:#e0e0e6;font-size:13px;font-weight:500;margin-bottom:2px;position:relative;transition:background .15s;}
+.nav-item:hover{background:rgba(255,255,255,.06);color:#fff;}
+.nav-item.active{background:rgba(255,255,255,.08);color:#fff;}
+.nav-item.active::before{content:"";position:absolute;left:0;top:6px;bottom:6px;width:3px;background:var(--accent);border-radius:0 2px 2px 0;}
+.nav-item i{font-size:18px;min-width:20px;text-align:center;}
+.nav-sub{padding-left:36px;margin-top:2px;}
+
+/* Top toolbar */
+.topbar{position:fixed;top:0;left:260px;right:0;height:60px;background:var(--bg-white);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 24px;z-index:50;}
+.breadcrumbs{font-size:13px;color:var(--text-muted);}
+.breadcrumbs strong{color:var(--text);margin-left:4px;}
+.toolbar-right{display:flex;align-items:center;gap:12px;}
+.btn-outline{padding:6px 14px;border:1px solid var(--border);border-radius:var(--radius);background:#fff;font-size:13px;cursor:pointer;color:var(--text);font-weight:500;}
+.icon-btn{width:36px;height:36px;border-radius:50%;border:1px solid var(--border);background:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text);}
+.user-menu{display:flex;align-items:center;gap:10px;cursor:pointer;}
+.user-menu img{width:32px;height:32px;border-radius:50%;object-fit:cover;background:#ddd;}
+
+/* Main content */
+.main{margin-left:260px;margin-top:60px;padding:36px 40px;width:calc(100% - 260px);overflow:auto;background:var(--bg-main);min-height:calc(100vh - 60px);}
+.main-collapsed{margin-left:56px;width:calc(100% - 56px);}
+
+.editor-card{background:#fff;border:1px solid var(--border);border-radius:8px;padding:40px 48px;max-width:960px;box-shadow:0 1px 3px rgba(0,0,0,.04);}
+
+.title-field{width:100%;border:none;outline:none;font-size:42px;font-weight:700;color:var(--text);padding:8px 0;margin-bottom:6px;background:transparent;line-height:1.15;}
+.title-field::placeholder{color:#b0b3b8;font-weight:700;}
+.subtitle-field{width:100%;border:none;outline:none;font-size:18px;color:#646970;padding:8px 0;margin-bottom:28px;background:transparent;}
+
+.content-editor{min-height:320px;padding:16px;border:1px dashed #c3c4c7;border-radius:var(--radius);background:#fafafa;color:var(--text);font-size:16px;line-height:1.65;outline:none;position:relative;}
+.content-editor:empty::before{content:"Нажмите «/» для выбора блока";color:#b0b3b8;font-style:italic;}
+.floating-toolbar{position:absolute;top:-44px;left:0;background:#fff;border:1px solid var(--border);border-radius:6px;padding:6px 8px;display:flex;gap:6px;box-shadow:0 2px 8px rgba(0,0,0,.05);z-index:10;}
+.floating-toolbar button{border:none;background:#f6f7f7;padding:6px 8px;border-radius:4px;cursor:pointer;font-size:13px;color:#333;}
+.floating-toolbar button:hover{background:#e8e9eb;}
+
+/* Right doc sidebar */
+.doc-sidebar{position:fixed;top:60px;right:0;width:320px;height:calc(100vh - 60px);background:#fff;border-left:1px solid var(--border);padding:28px 24px;overflow-y:auto;}
+.doc-tabs{display:flex;border-bottom:1px solid var(--border);margin-bottom:16px;}
+.doc-tabs button{flex:1;padding:8px 0;background:none;border:none;font-size:13px;font-weight:600;color:var(--text-muted);cursor:pointer;border-bottom:2px solid transparent;}
+.doc-tabs button.active{color:var(--text);border-color:var(--accent);}
+
+.accordion{margin-top:8px;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;}
+.accordion-header{padding:14px 14px;background:#f6f7f7;cursor:pointer;font-weight:600;font-size:13px;display:flex;justify-content:space-between;align-items:center;user-select:none;}
+.accordion-body{padding:14px;background:#fff;border-top:1px solid var(--border);display:none;}
+.accordion.open .accordion-body{display:block;}
+
+.form-row{margin-top:10px;}
+.form-row label{display:block;font-size:12px;color:#646970;margin-bottom:4px;font-weight:500;}
+.form-row input, .form-row select, .form-row textarea{width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:#fff;outline:none;}
+.form-row input:focus, .form-row select:focus, .form-row textarea:focus{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent);}
+
+.tag-input{display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:8px 10px;border:1px solid var(--border);border-radius:4px;background:#fff;min-height:36px;}
+.tag-pill{background:#e8e9eb;padding:3px 8px;border-radius:4px;font-size:12px;color:#333;}
+
+/* Responsive */
+@media(max-width:1200px){.doc-sidebar{display:none;}.main{margin-left:260px;}}
+@media(max-width:900px){.sidebar{width:56px;}.main{margin-left:56px;width:calc(100% - 56px);}.nav-item span{display:none;}.nav-title{display:none;}}
+</style>
+</head>
+<body>
+
+<!-- Sidebar -->
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar-header">
+    <div class="logo">JNN <span>Admin</span></div>
+    <div class="subtitle">WordPress-style Dashboard</div>
+  </div>
+  <div class="nav-section">
+    <div class="nav-title">Основное</div>
+    <a href="#" class="nav-item active"><i class="ph-fill ph-squares-four"></i> <span>Консоль</span></a>
+  </div>
+  <div class="nav-section">
+    <div class="nav-title">Записи</div>
+    <a href="#" class="nav-item"><i class="ph ph-article"></i> <span>Все записи</span></a>
+    <a href="#" class="nav-item active" style="padding-left:28px;"><i class="ph-fill ph-plus-circle"></i> <span>Добавить новую</span></a>
+    <a href="#" class="nav-item" style="padding-left:28px;"><i class="ph ph-tag"></i> <span>Рубрики</span></a>
+  </div>
+  <div class="nav-section">
+    <div class="nav-title">Медиа</div>
+    <a href="#" class="nav-item"><i class="ph-fill ph-images"></i> <span>Медиафайлы</span></a>
+  </div>
+  <div class="nav-section">
+    <a href="#" class="nav-item"><i class="ph-fill ph-file-text"></i> <span>Страницы</span></a>
+    <a href="#" class="nav-item"><i class="ph-fill ph-chat-circle-dots"></i> <span>Комментарии</span></a>
+  </div>
+  <div class="nav-section">
+    <a href="#" class="nav-item"><i class="ph-fill ph-paint-brush"></i> <span>Внешний вид</span></a>
+    <a href="#" class="nav-item"><i class="ph-fill ph-plug"></i> <span>Плагины</span></a>
+    <a href="#" class="nav-item"><i class="ph-fill ph-users"></i> <span>Пользователи</span></a>
+  </div>
+  <div class="nav-section">
+    <a href="#" class="nav-item"><i class="ph-fill ph-gear"></i> <span>Настройки</span></a>
+  </div>
+</aside>
+
+<!-- Topbar -->
+<header class="topbar">
+  <div class="breadcrumbs">Записи <strong>› Добавить новую</strong></div>
+  <div class="toolbar-right">
+    <a href="/" class="btn-outline">Просмотреть сайт</a>
+    <button class="icon-btn" onclick="alert('Уведомлений пока нет')" title="Уведомления"><i class="ph-fill ph-bell"></i></button>
+    <div class="user-menu">
+      <img src="https://i.pravatar.cc/150?img=12" alt="User">
+      <div>
+        <div style="font-size:13px;font-weight:600;line-height:1.2;">Нурлан</div>
+        <div style="font-size:11px;color:#646970;">Администратор</div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- Main -->
+<main class="main">
+  <div class="editor-card">
+    <input type="text" class="title-field" placeholder="Добавьте заголовок" value="Новая запись — JNN Factory">
+    <input type="text" class="subtitle-field" placeholder="Подзаголовок или краткое описание..." value="Производство одежды, шелкография, СТМ бренды">
+
+    <div class="content-editor" contenteditable="true" id="editorContent">
+      <p>Напишите здесь текст записи. Нажмите <b>/</b> для выбора блока: Заголовок, Абзац, Изображение, Список.</p>
+      <p>Это пример блока текста в стиле Gutenberg. Форматируйте текст через плавающее меню.</p>
+      <h2>Модели футболок</h2>
+      <ul>
+        <li>Футболка «Летучка» — от 50 шт</li>
+        <li>Футболка оверсайз — от 50 шт</li>
+        <li>Мужской лонгслив — от 50 шт</li>
+      </ul>
+      <p>Для визуального редактирования используйте плавающее меню форматирования, которое появляется при выделении текста.</p>
+    </div>
+
+    <div class="floating-toolbar" id="floatingToolbar" style="display:none;">
+      <button onclick="document.execCommand('bold')" title="Жирный"><i class="ph-fill ph-text-b"></i></button>
+      <button onclick="document.execCommand('italic')" title="Курсив"><i class="ph-fill ph-text-italic"></i></button>
+      <button onclick="document.execCommand('createLink',false,prompt('URL:','https://'))" title="Ссылка"><i class="ph-fill ph-link"></i></button>
+      <button onclick="document.execCommand('insertImage',false,prompt('URL изображения:','/assets/1.jpg'))" title="Изображение"><i class="ph-fill ph-image"></i></button>
+    </div>
+  </div>
+</main>
+
+<!-- Right doc sidebar -->
+<aside class="doc-sidebar">
+  <div class="doc-tabs">
+    <button class="active">Запись</button>
+    <button>Блок</button>
+  </div>
+
+  <div class="accordion open">
+    <div class="accordion-header" onclick="this.parentElement.classList.toggle('open')">Статус и видимость <span>▼</span></div>
+    <div class="accordion-body">
+      <div class="form-row">
+        <label>Статус</label>
+        <select><option>Черновик</option><option>Опубликовано</option></select>
+      </div>
+      <div class="form-row">
+        <label>Автор</label>
+        <select><option>Нурлан</option></select>
+      </div>
+    </div>
+  </div>
+
+  <div class="accordion open">
+    <div class="accordion-header" onclick="this.parentElement.classList.toggle('open')">Рубрики <span>▼</span></div>
+    <div class="accordion-body">
+      <label><input type="checkbox" checked> Производство одежды</label><br>
+      <label><input type="checkbox" checked> Шелкография</label><br>
+      <label><input type="checkbox"> СТМ бренды</label><br>
+      <label><input type="checkbox"> Опт в Бишкеке</label>
+    </div>
+  </div>
+
+  <div class="accordion">
+    <div class="accordion-header" onclick="this.parentElement.classList.toggle('open')">Метки <span>▼</span></div>
+    <div class="accordion-body">
+      <div class="form-row">
+        <input type="text" placeholder="Добавьте метку..." value="футболки, опт, Бишкек">
+      </div>
+    </div>
+  </div>
+
+  <div class="accordion open">
+    <div class="accordion-header" onclick="this.parentElement.classList.toggle('open')">Миниатюра записи <span>▼</span></div>
+    <div class="accordion-body">
+      <button onclick="document.getElementById('fileInput').click()" style="width:100%;padding:10px;background:#72aee6;color:#fff;border:none;border-radius:4px;font-weight:600;cursor:pointer;">Загрузить изображение</button>
+      <input type="file" id="fileInput" style="display:none" accept="image/*">
+      <p style="font-size:11px;color:#646970;margin-top:8px;">Поддерживаемые форматы: JPG, PNG, WebP (до 2 MB)</p>
+    </div>
+  </div>
+
+  <div class="accordion">
+    <div class="accordion-header" onclick="this.parentElement.classList.toggle('open')">SEO-блок <span>▼</span></div>
+    <div class="accordion-body">
+      <div class="form-row">
+        <label>Meta Title</label>
+        <input type="text" value="Футболки оптом в Бишкеке — JNN Factory">
+      </div>
+      <div class="form-row">
+        <label>Meta Description</label>
+        <textarea rows="3">Минимальный заказ 50 шт. Производство под брендом от 500 шт. Шелкография до 12 цветов.</textarea>
+      </div>
+      <div class="form-row">
+        <label>ЧПУ (URL)</label>
+        <input type="text" value="futbolki-optom-bishkek">
+      </div>
+    </div>
+  </div>
+</aside>
+
+<script>
+// Floating toolbar logic
+const editor = document.getElementById('editorContent');
+const toolbar = document.getElementById('floatingToolbar');
+
+editor.addEventListener('focus', () => {
+  toolbar.style.display = 'flex';
+  toolbar.style.top = (editor.getBoundingClientRect().top - 50) + 'px';
+});
+
+editor.addEventListener('click', () => {
+  toolbar.style.display = 'flex';
+});
+
+// Collapse sidebar on mobile click
+document.querySelector('.logo').addEventListener('click', () => {
+  document.getElementById('sidebar').classList.toggle('collapsed');
+  document.querySelector('.main').classList.toggle('main-collapsed');
+});
+</script>
+</body></html>

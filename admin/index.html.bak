@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JNN Admin — Gutenberg Style</title>
+<script src="https://unpkg.com/@phosphor-icons/web?v=2.0"></script>
+<script src="https://cdn.jsdelivr.net/npm/tinymce@6/tinymce.min.js?v=2.0"></script>
+<style>
+:root{--bg-sidebar:#1d2327;--bg-main:#f0f0f1;--bg-white:#fff;--accent:#72aee6;--text:#1d2327;--text-muted:#646970;--border:#dcdcde;--radius:6px;}
+*{box-sizing:border-box;margin:0;padding:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;}
+html,body{height:100vh;overflow:hidden;background:var(--bg-main);color:var(--text);}
+body{display:flex;flex-direction:row;}
+
+.wrapper{display:flex;width:100%;height:100vh;overflow:hidden;}
+
+.sidebar{width:260px;background:var(--bg-sidebar);color:#fff;display:flex;flex-direction:column;flex-shrink:0;transition:width .2s;overflow-y:auto;}
+.sidebar.collapsed{width:56px;}
+.sidebar-header{padding:20px 16px;border-bottom:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:10px;flex-shrink:0;}
+.logo-icon{width:32px;height:32px;background:linear-gradient(135deg,#72aee6,#4a90e2);border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:16px;flex-shrink:0;}
+.logo-title{font-weight:700;font-size:16px;letter-spacing:-.02em;line-height:1.2;}
+.subtitle{font-size:11px;color:#8a9299;margin-top:2px;display:none;}
+
+.nav-section{margin-top:20px;padding:0 12px;}
+.nav-title{font-size:11px;text-transform:uppercase;color:#8a9299;padding:8px 8px 4px;letter-spacing:.04em;}
+.nav-item{display:flex;align-items:center;gap:14px;padding:10px 8px;border-radius:var(--radius);text-decoration:none;color:#e0e0e6;font-size:13px;font-weight:500;margin-bottom:2px;position:relative;transition:background .15s;cursor:pointer;border:none;background:transparent;width:100%;text-align:left;}
+.nav-item:hover{background:rgba(255,255,255,.06);color:#fff;}
+.nav-item.active{background:#fff;color:var(--text);box-shadow:0 1px 4px rgba(0,0,0,.08);font-weight:600;}
+.nav-item i{font-size:18px;min-width:20px;text-align:center;}
+
+.topbar{position:fixed;top:0;left:260px;right:300px;height:60px;background:var(--bg-white);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 24px;z-index:50;flex-shrink:0;}
+.breadcrumbs{font-size:13px;color:var(--text-muted);}
+.breadcrumbs strong{color:var(--text);margin-left:4px;}
+.toolbar-right{display:flex;align-items:center;gap:12px;}
+.btn-outline{padding:6px 14px;border:1px solid var(--border);border-radius:var(--radius);background:#fff;font-size:13px;cursor:pointer;color:var(--text);font-weight:500;}
+.icon-btn{width:36px;height:36px;border-radius:50%;border:1px solid var(--border);background:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text);}
+.user-menu{display:flex;align-items:center;gap:10px;cursor:pointer;}
+.user-menu img{width:32px;height:32px;border-radius:50%;object-fit:cover;background:#ddd;}
+
+/* Central zone: flex-1, scroll, no overlap */
+.main-area{flex:1;overflow-y:auto;background:var(--bg-main);min-height:100vh;padding:80px 24px 40px;}
+
+.editor-card{background:#fff;border:1px solid var(--border);border-radius:8px;padding:40px 48px;max-width:960px;box-shadow:0 1px 3px rgba(0,0,0,.04);}
+
+.title-field{width:100%;border:none;outline:none;font-size:42px;font-weight:700;color:var(--text);padding:8px 0;margin-bottom:6px;background:transparent;line-height:1.15;}
+.title-field::placeholder{color:#b0b3b8;font-weight:700;}
+.subtitle-field{width:100%;border:none;outline:none;font-size:18px;color:#646970;padding:8px 0;margin-bottom:28px;background:transparent;}
+.content-editor{min-height:320px;padding:16px;border:1px dashed #c3c4c7;border-radius:var(--radius);background:#fafafa;color:var(--text);font-size:16px;line-height:1.65;outline:none;position:relative;}
+.content-editor:empty::before{content:"Нажмите «/» для выбора блока";color:#b0b3b8;font-style:italic;}
+.floating-toolbar{position:absolute;top:-44px;left:0;background:#fff;border:1px solid var(--border);border-radius:6px;padding:6px 8px;display:flex;gap:6px;box-shadow:0 2px 8px rgba(0,0,0,.05);z-index:5;pointer-events:auto;}
+.floating-toolbar button{border:none;background:#f6f7f7;padding:6px 8px;border-radius:4px;cursor:pointer;font-size:13px;color:#333;}
+.floating-toolbar button:hover{background:#e8e9eb;}
+
+.block-menu{position:absolute;top:-160px;left:0;background:#fff;border:1px solid var(--border);border-radius:8px;padding:8px;min-width:220px;box-shadow:0 8px 24px rgba(0,0,0,.1);z-index:10;display:none;}
+.block-menu button{display:block;width:100%;text-align:left;padding:8px 10px;border:none;background:none;font-size:13px;cursor:pointer;color:var(--text);border-radius:4px;}
+.block-menu button:hover{background:#f6f7f7;}
+
+.toast{position:fixed;bottom:24px;right:340px;background:#1d2327;color:#fff;padding:14px 18px;border-radius:8px;font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,.15);z-index:200;opacity:0;transform:translateY(20px);transition:all .3s ease;pointer-events:none;}
+.toast.show{opacity:1;transform:translateY(0);pointer-events:auto;}
+
+.doc-sidebar{position:fixed;top:60px;right:0;width:300px;height:calc(100vh - 60px);background:#fff;border-left:1px solid var(--border);padding:28px 24px;overflow-y:auto;display:block;flex-shrink:0;}
+.doc-tabs{display:flex;border-bottom:1px solid var(--border);margin-bottom:16px;}
+.doc-tabs button{flex:1;padding:8px 0;background:none;border:none;font-size:13px;font-weight:600;color:var(--text-muted);cursor:pointer;border-bottom:2px solid transparent;}
+.doc-tabs button.active{color:var(--text);border-color:var(--accent);}
+.accordion{margin-top:8px;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;}
+.accordion-header{padding:14px 14px;background:#f6f7f7;cursor:pointer;font-weight:600;font-size:13px;display:flex;justify-content:space-between;align-items:center;user-select:none;}
+.accordion-body{padding:14px;background:#fff;border-top:1px solid var(--border);display:none;animation:fadeIn .2s ease;}
+.accordion.open .accordion-body{display:block;}
+@keyframes fadeIn{from{opacity:0;transform:translateY(-2px);}to{opacity:1;transform:translateY(0);}}
+.form-row{margin-top:10px;}
+.form-row label{display:block;font-size:12px;color:#646970;margin-bottom:4px;font-weight:500;}
+.form-row input, .form-row select, .form-row textarea{width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:#fff;outline:none;}
+.form-row input:focus, .form-row select:focus, .form-row textarea:focus{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent);}
+.tag-input{display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:8px 10px;border:1px solid var(--border);border-radius:4px;background:#fff;min-height:36px;}
+.tag-pill{background:#e8e9eb;padding:3px 8px;border-radius:4px;font-size:12px;color:#333;}
+.drop-zone{border:2px dashed var(--border);border-radius:8px;padding:24px;text-align:center;cursor:pointer;background:#fafafa;transition:background .2s,border-color .2s;}
+.drop-zone:hover{background:#f0f0f1;border-color:var(--accent);}
+.doc-btn-group{display:flex;flex-direction:column;gap:10px;margin-bottom:20px;}
+.doc-btn-group button{padding:10px 14px;border-radius:6px;border:none;font-size:13px;font-weight:600;cursor:pointer;transition:background .15s;}
+.doc-btn-group .btn-publish{background:#72aee6;color:#fff;}
+.doc-btn-group .btn-draft{background:#f6f7f7;color:var(--text);border:1px solid var(--border);}
+
+/* Placeholder card for non-editor tabs */
+.placeholder-card{background:#fff;border:1px solid var(--border);border-radius:8px;padding:48px 40px;max-width:720px;margin:0 auto;box-shadow:0 1px 3px rgba(0,0,0,.04);text-align:center;}
+.placeholder-card h2{font-size:28px;font-weight:700;margin-bottom:8px;}
+.placeholder-card p{color:var(--text-muted);margin-bottom:24px;}
+
+@media (max-width:1200px){.doc-sidebar{display:none;}.main-area{padding:80px 20px 30px;}}
+@media (max-width:900px){.sidebar{width:56px;}.main-area{padding:80px 16px 30px;}.nav-item span{display:none;}.nav-title{display:none;}.logo-title,.subtitle{display:none;}.topbar{left:56px;right:0;}}
+</style>
+</head>
+<body>
+
+<div class="wrapper">
+  <!-- Sidebar -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="logo-icon">J</div>
+      <div>
+        <div class="logo-title">JNN Admin</div>
+        <div class="subtitle">WordPress-style Dashboard</div>
+      </div>
+    </div>
+    <div class="nav-section">
+      <div class="nav-title">Основное</div>
+      <button onclick="setTab('console')" class="nav-item" id="tab-console" data-tab="console"><i class="ph-fill ph-squares-four"></i> <span>Консоль</span></button>
+    </div>
+    <div class="nav-section">
+      <div class="nav-title">Записи</div>
+      <button onclick="setTab('posts')" class="nav-item" id="tab-posts" data-tab="posts"><i class="ph ph-article"></i> <span>Все записи</span></button>
+      <button onclick="setTab('add-new')" class="nav-item active" id="tab-add-new" data-tab="add-new"><i class="ph-fill ph-plus-circle"></i> <span>Добавить новую</span></button>
+      <button onclick="setTab('categories')" class="nav-item" id="tab-categories" data-tab="categories"><i class="ph ph-tag"></i> <span>Рубрики</span></button>
+    </div>
+    <div class="nav-section">
+      <div class="nav-title">Медиа</div>
+      <button onclick="setTab('media')" class="nav-item" id="tab-media" data-tab="media"><i class="ph-fill ph-images"></i> <span>Медиафайлы</span></button>
+    </div>
+    <div class="nav-section">
+      <button onclick="setTab('pages')" class="nav-item" id="tab-pages" data-tab="pages"><i class="ph-fill ph-file-text"></i> <span>Страницы</span></button>
+      <button onclick="setTab('comments')" class="nav-item" id="tab-comments" style="display:none;" data-tab="comments"><i class="ph-fill ph-chat-circle-dots"></i> <span>Комментарии</span></button>
+    </div>
+    <div class="nav-section">
+      <div class="nav-title">Каталог</div>
+      <button onclick="setTab('catalog')" class="nav-item" id="tab-catalog" data-tab="catalog"><i class="ph-fill ph-catalog"></i> <span>Каталог</span></button>
+    </div>
+    <div class="nav-section">
+      <button onclick="setTab('appearance')" class="nav-item" id="tab-appearance" style="display:none;" data-tab="appearance"><i class="ph-fill ph-paint-brush"></i> <span>Внешний вид</span></button>
+      <button onclick="setTab('plugins')" class="nav-item" id="tab-plugins" style="display:none;" data-tab="plugins"><i class="ph-fill ph-plug"></i> <span>Плагины</span></button>
+      <button onclick="setTab('users')" class="nav-item" id="tab-users" style="display:none;" data-tab="users"><i class="ph-fill ph-users"></i> <span>Пользователи</span></button>
+    </div>
+    <div class="nav-section">
+      <button onclick="setTab('settings')" class="nav-item" id="tab-settings" data-tab="settings"><i class="ph-fill ph-gear"></i> <span>Настройки</span></button>
+    </div>
+  </aside>
+
+  <!-- Main content -->
+  <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0;">
+    <header class="topbar" id="topbar">
+      <div class="breadcrumbs" id="breadcrumbs">Записи <strong>› Добавить новую</strong></div>
+      <div class="toolbar-right">
+        <a href="https://jnnfactory.online/" target="_blank" class="btn-outline">Просмотреть сайт</a>
+        <button class="icon-btn" onclick="alert('Уведомлений пока нет')" title="Уведомления"><i class="ph-fill ph-bell"></i></button>
+        <div class="user-menu">
+          <img src="https://i.pravatar.cc/150?img=12" alt="User">
+          <div>
+            <div style="font-size:13px;font-weight:600;line-height:1.2;">Нурлан</div>
+            <div style="font-size:11px;color:#646970;">Администратор</div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <main class="main-area" id="mainArea">
+      <div id="routeContent"></div>
+    </main>
+  </div>
+
+  <!-- Right doc sidebar -->
+  <aside class="doc-sidebar" id="docSidebar">
+    <div class="doc-tabs">
+      <button class="active" onclick="switchDocTab(this)">Запись</button>
+      <button onclick="switchDocTab(this)">Блок</button>
+    </div>
+    <div class="doc-btn-group">
+      <button class="btn-publish" onclick="publishPost()">Опубликовать</button>
+      <button class="btn-draft" onclick="saveDraft()">Сохранить черновик</button>
+    </div>
+    <div class="accordion open">
+      <div class="accordion-header" onclick="this.parentElement.classList.toggle('open')">Статус и видимость <span>▼</span></div>
+      <div class="accordion-body">
+        <div class="form-row"><label>Статус</label><select id="postStatus" onchange="updateState()"><option>Черновик</option><option selected>Опубликовано</option></select></div>
+        <div class="form-row"><label>Автор</label><select id="postAuthor" onchange="updateState()"><option selected>Нурлан</option></select></div>
+      </div>
+    </div>
+    <div class="accordion open">
+      <div class="accordion-header" onclick="this.parentElement.classList.toggle('open')">Рубрики <span>▼</span></div>
+      <div class="accordion-body">
+        <div id="categoriesContainer"></div>
+        <script>fetch('/api/categories?v=2.0').then(r=>r.json()).then(data=>{const arr = Array.isArray(data)?data:[]; document.getElementById('categoriesContainer').innerHTML = arr.map(c=>{const label = (typeof c==='object' && c!==null)? (c.name||'') : (c||''); return '<label><input type="checkbox" onchange="updateState()"> ' + label + '</label><br>';}).join('');});</script>
+        <div style="margin-top:8px;"><button onclick="addCategory(this)" style="font-size:12px;padding:4px 10px;border:1px solid var(--border);border-radius:4px;background:#fff;cursor:pointer;">+ Добавить</button></div>
+      </div>
+    </div>
+    <div class="accordion">
+      <div class="accordion-header" onclick="this.parentElement.classList.toggle('open')">Миниатюра записи <span>▼</span></div>
+      <div class="accordion-body">
+        <div class="drop-zone" onclick="document.getElementById('fileInput').click()">
+          <i class="ph-fill ph-upload-simple" style="font-size:24px;color:var(--accent);display:block;margin-bottom:6px;"></i>
+          <strong>Перетащите изображение</strong><br><span style="font-size:12px;color:var(--text-muted);">или кликните для выбора</span>
+        </div>
+        <input type="file" id="fileInput" style="display:none" accept="image/*" onchange="updateState()">
+        <p style="font-size:11px;color:#646970;margin-top:8px;">Поддерживаемые форматы: JPG, PNG, WebP (до 2 MB)</p>
+      </div>
+    </div>
+    <div class="accordion">
+      <div class="accordion-header" onclick="this.parentElement.classList.toggle('open')">SEO-блок <span>▼</span></div>
+      <div class="accordion-body">
+        <div class="form-row"><label>Meta Title</label><input type="text" value="Футболки оптом в Бишкеке — JNN Factory" oninput="updateState()"></div>
+        <div class="form-row"><label>Meta Description</label><textarea rows="3" oninput="updateState()">Минимальный заказ 50 шт. Производство под брендом от 500 шт. Шелкография до 12 цветов.</textarea></div>
+        <div class="form-row"><label>ЧПУ (URL)</label><input type="text" value="futbolki-optom-bishkek" oninput="updateState()"></div>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const tabs = ['console','posts','add-new','categories','media','pages','comments','catalog','appearance','plugins','users','settings'];
+let activeTab = 'add-new';
+
+function setTab(key) {
+  activeTab = key;
+  document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+  const btn = document.getElementById('tab-' + key);
+  if(btn) btn.classList.add('active');
+
+  const main = document.getElementById('routeContent');
+  const doc = document.getElementById('docSidebar');
+  const breadcrumbs = document.getElementById('breadcrumbs');
+  const topbar = document.getElementById('topbar');
+
+  if(key === 'add-new') {
+    doc.style.display = 'block';
+    breadcrumbs.innerHTML = 'Записи <strong>› Добавить новую</strong>';
+    main.innerHTML = document.getElementById('editorTemplate') ? document.getElementById('editorTemplate').innerHTML : '';
+    if(!document.getElementById('postTitle')) injectEditor();
+  } else {
+    doc.style.display = 'none';
+    const labelMap = {console:'Консоль',posts:'Все записи',categories:'Рубрики',media:'Медиафайлы',pages:'Страницы',comments:'Комментарии',catalog:'Каталог',appearance:'Внешний вид',plugins:'Плагины',users:'Пользователи',settings:'Настройки'};
+    breadcrumbs.innerHTML = labelMap[key] ? '<strong>' + labelMap[key] + '</strong>' : '<strong>' + key + '</strong>';
+    if(key === 'media') {
+    fetch('/media?v=2.0').then(r=>r.json()).then(data=>{
+        let html='<h2>Медиафайлы</h2><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:12px;">';
+        data.forEach(item=>{
+            const url = (typeof item==='object' && item!==null)? (item.url||'') : (item||'');
+            const name = (typeof item==='object' && item!==null)? (item.name||(url||'').split('/').pop()) : (item||'');
+            html += '<div><img src="' + url + '" style="width:100%;height:100px;object-fit:cover;border-radius:6px;"><p style="font-size:11px;margin-top:4px;">' + name + '</p></div>';
+        });
+        html += '</div><button onclick="setTab(\'add-new\')" class="btn-outline" style="margin-top:16px;">Назад к редактору</button>';
+        main.innerHTML = html;
+    }).catch(e=>{main.innerHTML='<h2>Медиафайлы</h2><p>Ошибка загрузки: '+e+'</p>';});
+} else if(key === 'posts') {
+    fetch('/pages?v=2.0').then(r=>r.json()).then(data=>{
+        let html='<h2>Все записи</h2><table style="width:100%;border-collapse:collapse;font-size:13px;"><tr style="border-bottom:1px solid #ccc;"><th>Файл товара</th><th>Действие</th></tr>';
+        data.forEach(p=>{ const name = (typeof p==='object' && p!==null)? (p.name||'') : (p||''); const fileName = name ? (name + '.html') : ''; html += '<tr><td>' + fileName + '</td><td><button onclick="loadPageEdit(\'' + fileName + '\')" class="btn-outline">Редактировать</button></td></tr>'; });
+        html += '</table><button onclick="setTab(\'add-new\')" class="btn-outline" style="margin-top:16px;">Назад к редактору</button>';
+        main.innerHTML = html;
+    }).catch(e=>{main.innerHTML='<h2>Все записи</h2><p>Ошибка загрузки: '+e+'</p>';});
+} else if(key === 'categories') {
+    fetch('/api/categories?v=2.0').then(r=>r.json()).then(data=>{ let arr = Array.isArray(data)?data:[]; let html='<h2>Рубрики</h2><div style="background:#fff;padding:24px;border-radius:8px;border:1px solid #dcdcde;">'; arr.forEach(c=>{ const label = (typeof c==='object' && c!==null)? (c.name||c.title||'') : (c||''); html += '<label style="display:block;margin-bottom:6px;"><input type="checkbox" onchange="updateState()"> ' + label + '</label>'; }); html += '</div><button onclick="setTab(\'add-new\')" class="btn-outline" style="margin-top:16px;">Назад к редактору</button>'; main.innerHTML = html; }).catch(e=>{main.innerHTML='<h2>Рубрики</h2><p>Ошибка загрузки: '+e+'</p>';});
+} else if(key === 'pages') {
+    fetch('/pages?v=2.0').then(r=>r.json()).then(data=>{
+        let html='<h2>Страницы</h2><table style="width:100%;border-collapse:collapse;font-size:13px;"><tr style="border-bottom:1px solid #ccc;"><th>Имя</th><th>URL</th><th>Действие</th></tr>';
+        data.forEach(p=>{
+            const name = (typeof p==='object' && p!==null)? (p.name||'') : (p||'');
+            const urlPath = (typeof p==='object' && p!==null)? (p.url||('/'+name)) : (p||'');
+            html += '<tr><td>' + name + '</td><td><a href="https://jnnfactory.online' + urlPath + '" target="_blank">' + urlPath + '</a></td><td><button onclick="loadPageEdit(\'' + name + '.html\')" class="btn-outline">Редактировать</button></td></tr>';
+        });
+        html += '</table><button onclick="setTab(\'add-new\')" class="btn-outline" style="margin-top:16px;">Назад к редактору</button>';
+        main.innerHTML = html;
+    }).catch(e=>{main.innerHTML='<h2>Страницы</h2><p>Ошибка загрузки: '+e+'</p>';});
+} else if(key === 'catalog') {
+    fetch('/api/catalog?v=2.0').then(r=>r.json()).then(data=>{
+        let html='<h2>Каталог моделей</h2><table style="width:100%;border-collapse:collapse;font-size:13px;"><tr style="border-bottom:1px solid #ccc;"><th>Модель</th><th>Фото</th><th>Минимальный заказ</th></tr>';
+        data.forEach(item=>{
+            html += '<tr><td>' + item.name + '</td><td><img src="' + item.image + '" style="width:60px;height:60px;object-fit:cover;border-radius:4px;"></td><td>' + item.min_order + '</td></tr>';
+        });
+        html += '</table><button onclick="setTab(\'add-new\')" class="btn-outline" style="margin-top:16px;">Назад к редактору</button>';
+        main.innerHTML = html;
+    }).catch(e=>{main.innerHTML='<h2>Каталог</h2><p>Ошибка загрузки: '+e+'</p>';});
+} else if(key === 'settings') {
+    fetch('/settings?v=2.0').then(r=>r.json()).then(data=>{
+        main.innerHTML = '<h2>Настройки</h2><div style="background:#fff;padding:24px;border-radius:8px;border:1px solid #dcdcde;">' +
+        '<div style="margin-bottom:12px;"><label style="font-weight:600;">Название фабрики</label><br><input type="text" id="set_name" value="' + (data.site_name||'') + '" style="width:100%;padding:8px;"></div>' +
+        '<div style="margin-bottom:12px;"><label style="font-weight:600;">Email</label><br><input type="email" id="set_email" value="' + (data.email||'') + '" style="width:100%;padding:8px;"></div>' +
+        '<button onclick="saveSettings()" class="btn-outline">Сохранить</button></div>';
+    }).catch(e=>{main.innerHTML='<h2>Настройки</h2><p>Ошибка загрузки: '+e+'</p>';});
+} else {
+    main.innerHTML = '<div class="placeholder-card"><h2>' + (labelMap[key] || key) + '</h2><p>Заглушка раздела. Данные появятся после подключения бэкенда.</p><button onclick="setTab(\'add-new\')" class="btn-outline">Назад к редактору</button></div>';
+}
+  }
+}
+
+function injectEditor() {
+  const container = document.getElementById('routeContent');
+  container.innerHTML = `
+    <div class="editor-card">
+      <input type="text" class="title-field" id="postTitle" placeholder="Добавьте заголовок" value="Новая запись — JNN Factory" oninput="updateState()">
+      <input type="text" class="subtitle-field" id="postSubtitle" placeholder="Подзаголовок или краткое описание..." value="Производство одежды, шелкография, СТМ бренды" oninput="updateState()">
+      <div class="content-editor" contenteditable="true" id="editorContent" oninput="updateState()" onmouseup="showToolbar()" onkeyup="showToolbar()">
+        <p>Напишите здесь текст записи. Нажмите <b>/</b> для выбора блока: Заголовок, Абзац, Изображение, Список.</p>
+        <p>Это пример блока текста в стиле Gutenberg. Форматируйте текст через плавающее меню.</p>
+        <h2>Модели футболок</h2>
+        <ul><li>Футболка «Летучка» — от 50 шт</li><li>Футболка оверсайз — от 50 шт</li><li>Мужской лонгслив — от 50 шт</li></ul>
+        <p>Для визуального редактирования используйте плавающее меню форматирования, которое появляется при выделении текста.</p>
+      </div>
+      <div class="floating-toolbar" id="floatingToolbar" style="display:none;">
+        <button onclick="document.execCommand('bold')" title="Жирный"><i class="ph-fill ph-text-b"></i></button>
+        <button onclick="document.execCommand('italic')" title="Курсив"><i class="ph-fill ph-text-italic"></i></button>
+        <button onclick="document.execCommand('createLink',false,prompt('URL:','https://'))" title="Ссылка"><i class="ph-fill ph-link"></i></button>
+        <button onclick="document.execCommand('insertImage',false,prompt('URL изображения:','/assets/1.jpg'))" title="Изображение"><i class="ph-fill ph-image"></i></button>
+      </div>
+      <div class="block-menu" id="blockMenu">
+        <button onclick="insertBlock('h2')">Заголовок</button>
+        <button onclick="insertBlock('p')">Абзац</button>
+        <button onclick="insertBlock('ul')">Список</button>
+        <button onclick="insertBlock('img')">Изображение</button>
+      </div>
+    </div>`;
+  initEditorEvents();
+  updateState();
+}
+
+const currentPost = {title:'',subtitle:'',content:'',categories:[],status:'Опубликовано',author:'Нурлан',featuredImage:null,metaTitle:'',metaDescription:'',slug:''};
+
+function updateState(){
+  const title = document.getElementById('postTitle');
+  const subtitle = document.getElementById('postSubtitle');
+  const content = document.getElementById('editorContent');
+  const status = document.getElementById('postStatus');
+  const author = document.getElementById('postAuthor');
+  if(title) currentPost.title = title.value;
+  if(subtitle) currentPost.subtitle = subtitle.value;
+  if(content) currentPost.content = content.innerHTML;
+  if(status) currentPost.status = status.value;
+  if(author) currentPost.author = author.value;
+  const cats = [];
+  document.querySelectorAll('.accordion-body input[type="checkbox"]').forEach(cb => {
+    if(cb.checked && cb.parentElement && cb.parentElement.textContent.trim()) cats.push(cb.parentElement.textContent.trim());
+  });
+  currentPost.categories = cats;
+}
+function showToast(msg, data){
+  const toast = document.getElementById('toast');
+  toast.innerHTML = msg + '<pre style="margin-top:8px;background:#111;padding:10px;border-radius:4px;font-size:11px;overflow:auto;">' + JSON.stringify(data || currentPost, null, 2) + '</pre>';
+  toast.classList.add('show');
+  console.log('currentPost:', currentPost);
+  setTimeout(() => toast.classList.remove('show'), 5000);
+}
+function publishPost(){ updateState(); currentPost.status = 'Опубликовано'; if(currentFile){ currentPost.filename = currentFile; } showToast('Запись опубликована', currentPost); fetch('/edit', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({filename: currentFile, content: (tinymce.activeEditor ? tinymce.activeEditor.getContent() : '')})}).then(r=>r.text()).then(t=>console.log('saved', t)).catch(e=>console.error('save failed',e)); }
+function saveDraft(){ updateState(); currentPost.status = 'Черновик'; showToast('Черновик сохранен', currentPost); }
+
+function showToolbar(){
+  const toolbar = document.getElementById('floatingToolbar');
+  const sel = window.getSelection();
+  if(!toolbar) return;
+  if(sel.toString().length > 0){
+    toolbar.style.display = 'flex';
+    const rect = sel.getRangeAt(0).getBoundingClientRect();
+    toolbar.style.top = (rect.top - 44) + 'px'; toolbar.style.left = rect.left + 'px';
+  }
+}
+function initEditorEvents(){
+  const editor = document.getElementById('editorContent');
+  if(!editor) return;
+  editor.addEventListener('keydown', function(e){
+    if(e.key === '/'){
+      const range = window.getSelection().getRangeAt(0);
+      const menu = document.getElementById('blockMenu');
+      if(menu && range.startContainer.nodeType === 3){
+        menu.style.display = 'block';
+        const edRect = editor.getBoundingClientRect();
+        menu.style.top = (edRect.top - 170) + 'px';
+        menu.style.left = edRect.left + 'px';
+        e.preventDefault();
+      }
+    } else if(e.key !== 'Backspace' && e.key !== 'Delete'){
+      const menu = document.getElementById('blockMenu');
+      if(menu) menu.style.display = 'none';
+    }
+  });
+}
+function insertBlock(type){
+  const menu = document.getElementById('blockMenu');
+  if(menu) menu.style.display = 'none';
+  if(type === 'h2'){ const h = document.createElement('h2'); h.innerText = 'Новый заголовок'; document.getSelection().getRangeAt(0).deleteContents(); document.getSelection().getRangeAt(0).insertNode(h); }
+  else if(type === 'ul'){ const ul = document.createElement('ul'); const li = document.createElement('li'); li.innerText = 'Элемент списка'; ul.appendChild(li); document.execCommand('insertHTML', false, ul.outerHTML); }
+  else if(type === 'img'){ const url = prompt('URL изображения:', '/assets/1.jpg'); if(url) document.execCommand('insertImage', false, url); }
+  else { document.getSelection().focusNode.insertAdjacentElement('afterend', document.createElement('p')); }
+  updateState();
+}
+function switchDocTab(btn){ document.querySelectorAll('.doc-tabs button').forEach(b => b.classList.remove('active')); btn.classList.add('active'); }
+function addCategory(btn){ const label = btn.closest('.accordion-body'); const input = document.createElement('label'); input.innerHTML = '<input type="checkbox" onchange="updateState()"> Новая рубрика'; label.insertBefore(input, btn.closest('div')); updateState(); }
+
+let currentFile = '';
+function loadPageEdit(fname) {
+  currentFile = fname;
+  fetch('/edit?file=' + encodeURIComponent(fname) + '&v=2.0')
+    .then(r => r.json())
+    .then(data => {
+      setTab('add-new');
+      const subtitle = document.getElementById('postSubtitle');
+      if(subtitle) subtitle.value = fname;
+      const editorArea = document.getElementById('editorContent');
+      if(editorArea) editorArea.innerHTML = '';
+      window.pendingContent = data.content || '';
+      const insertContent = () => {
+        if(tinymce.get('editor')) tinymce.get('editor').setContent(window.pendingContent);
+        else if(tinymce.activeEditor) tinymce.activeEditor.setContent(window.pendingContent);
+        else { if(editorArea) editorArea.innerHTML = window.pendingContent; }
+        window.pendingContent = '';
+      };
+      if(typeof tinymce !== 'undefined' && tinymce.get('editor') && tinymce.get('editor').initialized) insertContent();
+      else if(typeof tinymce !== 'undefined' && tinymce.get('editor')) {
+        tinymce.init({ selector:'#editorContent', init_instance_callback:function(editor){ editor.setContent(window.pendingContent || ''); window.pendingContent = ''; } });
+        setTimeout(insertContent, 150);
+      } else if(typeof tinymce !== 'undefined') {
+        tinymce.init({ selector:'#editorContent', plugins:'link image lists', toolbar:'undo redo | bold italic underline | alignleft aligncenter alignright | bullist numlist | link image', height:300, init_instance_callback:function(editor){ editor.setContent(window.pendingContent || ''); window.pendingContent = ''; } });
+        setTimeout(insertContent, 200);
+      } else { setTimeout(() => { if(editorArea) editorArea.innerHTML = data.content || ''; }, 100); }
+      const title = document.getElementById('postTitle');
+      if(title) title.value = fname.replace('.html','');
+      updateState();
+    })
+    .catch(e => console.error('loadPageEdit failed', e));
+}
+
+
+function saveSettings() {
+    const name = document.getElementById('set_name') ? document.getElementById('set_name').value : '';
+    const email = document.getElementById('set_email') ? document.getElementById('set_email').value : '';
+    fetch('/settings', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({site_name:name, email:email}) }).then(r=>r.json()).then(d=>{ alert('Сохранено'); }).catch(e=>alert('Ошибка: '+e));
+}
+
+// Inline functions for index.html
+function openProduct(idx) { console.log('openProduct', idx); }
+function deleteMedia(key, prevId, defUrl) { try { var el = document.getElementById(key); if(el) el.value=''; var prev=document.getElementById(prevId); if(prev) prev.src = defUrl || ''; } catch(e){ console.error('deleteMedia', e); } }
+function uploadProductImage(input, key, prevId) { console.log('uploadProductImage', input, key); }
+function switchTab(key) { console.log('switchTab', key); }
+function renderCatalogTree() { console.log('renderCatalogTree'); }
+
+// Init TinyMCE
+window.addEventListener('DOMContentLoaded', () => {
+  setTab(activeTab);
+  tinymce.init({
+    selector: '#editorContent',
+    inline: false,
+    plugins: 'link image lists',
+    toolbar: 'undo redo | bold italic underline | alignleft aligncenter alignright | bullist numlist | link image | fontfamily fontsize forecolor',
+    menubar: 'file edit view insert format tools table',
+    height: 300,
+  });
+});
+</script>
+</body>
+</html>

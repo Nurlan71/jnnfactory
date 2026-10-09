@@ -1,0 +1,14 @@
+INFO:     Started server process [2572637]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:5000 (Press CTRL+C to quit)
+INFO:     127.0.0.1:58228 - "GET /api/content HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58244 - "POST /api/content HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45254 - "GET /api/content HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51974 - "GET /api/content HTTP/1.1" 200 OK
+INFO:     127.0.0.1:47044 - "GET /api/content HTTP/1.1" 200 OK
+INFO:     127.0.0.1:47052 - "POST /api/content HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [2572637]

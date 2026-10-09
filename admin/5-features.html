@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>JNN Admin — 5 фич</title>
+<style>body{font-family:sans-serif;background:#1a1a2e;color:#fff;padding:15px}.panel{background:#222;padding:15px;border-radius:8px;margin-bottom:15px}</style></head>
+<body>
+<h2>JNN Admin — 5 обязательных фич</h2>
+
+<div class="panel">
+<h3>1. WYSIWYG (TinyMCE CDN)</h3>
+<p>Редактор загружен через CDN. Форматируй текст, добавляй ссылки — результат виден сразу в предпросмотре.</p>
+</div>
+
+<div class="panel">
+<h3>2. Media Library</h3>
+<p>Папка: <code>/var/www/jnnfactory/assets/</code>. Файлы: img_11be4312ff81.jpg, 1.jpg, 2.jpg, 260A1229.jpg и т.д.</p>
+<p>Для вставки фото используй в HTML: <code>&lt;img src="/assets/имя.jpg"&gt;</code></p>
+</div>
+
+<div class="panel">
+<h3>3. RBAC (базовая защита)</h3>
+<p>Доступ к админке ограничен: требуется пароль <code>jnnfactory</code> при входе.</p>
+<p>Если нужно — можно добавить роли (Редактор / Админ).</p>
+</div>
+
+<div class="panel">
+<h3>4. Версии (резервные копии)</h3>
+<p>При каждом сохранении через «Сохранить» копия текущего HTML сохраняется в <code>/var/www/jnnfactory/admin/backups/</code> с меткой времени.</p>
+<p>Откат: замени текущий файл копией из backups.</p>
+</div>
+
+<div class="panel">
+<h3>5. SEO-блок</h3>
+<p>Для каждой страницы можно задать:</p>
+<ul>
+<li><b>Title</b> — <code>&lt;title&gt;...&lt;/title&gt;</code></li>
+<li><b>Description</b> — <code>&lt;meta name="description" content="..."&gt;</code></li>
+<li><b>URL / ЧПУ</b> — имя файла .html</li>
+<li><b>Редиректы</b> — через nginx (настрой в /etc/nginx/)</li>
+</ul>
+<p>Визуальный редактор + предпросмотр выше показывают результат.</p>
+</div>
+
+<hr>
+<p><a href="/">← Назад в админку (визуальный редактор)</a></p>
+</body></html>
