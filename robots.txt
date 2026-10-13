@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+Disallow: /assets/tildcdn/
+
+Sitemap: https://jnnfactory.online/sitemap.xml

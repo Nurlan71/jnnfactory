@@ -1,0 +1,22 @@
+{
+  "home": {
+    "title": "JNN Factory — Оптика и оборудование для производства",
+    "description": "Производитель очков, линз и расходных материалов для оптического производства",
+    "schema": "Organization"
+  },
+  "product": {
+    "title": "{{product_name}} — JNN Factory",
+    "description": "{{short_description}}",
+    "schema": "Product"
+  },
+  "catalog": {
+    "title": "Каталог продукции JNN Factory",
+    "description": "Каталог продукции для оптического производства и оптики",
+    "schema": "ItemList"
+  },
+  "contacts": {
+    "title": "Контакты JNN Factory",
+    "description": "Контактная информация, адрес, телефон, e-mail для связи с JNN Factory",
+    "schema": "ContactPoint"
+  }
+}

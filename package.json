@@ -1,0 +1,24 @@
+{
+  "name": "jnnfactory",
+  "version": "1.0.0",
+  "description": "- Сайт фабрики: jnnfactory.online\r - Админ-панель: admin.jnnfactory.online (auth: basic)\r - Бэкенд: Flask (порт 5000)\r - Сток-API: Docker (порт 8095) — /health, /api/v1/stock/velvet-640\r - Nginx: SSL (Let's Encrypt), proxy, CORS",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "vite build"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "autoprefixer": "^10.6.1",
+    "postcss": "^8.5.30",
+    "tailwindcss": "^4.3.3"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "postcss-flexbugs-fixes": "^5.0.2",
+    "vite": "^8.3.4"
+  }
+}
