@@ -14,13 +14,23 @@
     return String(imageValue).split(',')[0].trim();
   }
 
+  var TRANSLIT = {
+    'а':'a','б':'b','в':'v','г':'g','д':'d','е':'e','ё':'e','ж':'zh','з':'z','и':'i','й':'y',
+    'к':'k','л':'l','м':'m','н':'n','о':'o','п':'p','р':'r','с':'s','т':'t','у':'u','ф':'f',
+    'х':'h','ц':'ts','ч':'ch','ш':'sh','щ':'sch','ъ':'','ы':'y','ь':'','э':'e','ю':'yu','я':'ya'
+  };
+
   function slugify(name) {
     return (name || 'product')
       .toLowerCase()
-      .replace(/[«»""'']/g, '')
-      .replace(/[^a-z0-9а-яё\s-]/gi, '')
+      .replace(/[«»""''’‘]/g, '')
+      .split('')
+      .map(function (ch) { return TRANSLIT[ch] !== undefined ? TRANSLIT[ch] : ch; })
+      .join('')
+      .replace(/[^a-z0-9\s-]/g, '')
       .trim()
-      .replace(/\s+/g, '-');
+      .replace(/\s+/g, '-')
+      .replace(/-+/g, '-');
   }
 
   async function renderCatalog() {
