@@ -1,15 +1,25 @@
-# Dependencies 
-node_modules/ 
-venv/ 
-package-lock.json 
-# Python 
-__pycache__/ 
-*.pyc 
-# Build 
-dist/ 
-*.min.css 
-*.min.js 
-# Logs 
-*.log 
-# Environment 
-.env 
+# Dependencies
+node_modules/
+venv/
+package-lock.json
+
+# Python
+__pycache__/
+*.pyc
+
+# Build
+dist/
+
+# Logs
+*.log
+
+# Environment
+.env
+
+# Вспомогательные скрипты агента (не сайт)
+_scripts/
+clean_tilda.py
+replace-css.js
+replace-tilda-css.bat
+add-schema.js
+setup-tailwind.ps1
