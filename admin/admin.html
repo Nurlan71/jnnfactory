@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>JNN Factory CMS</title>
+  <style>
+    :root { --side-w: 280px; --bg: #f0f0f1; --dark: #1d2327; --primary: #2271b1; --border: #ccd0d4; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); display: flex; height: 100vh; overflow: hidden; }
+    .sidebar-left { width: var(--side-w); background: var(--dark); color: #fff; flex-shrink: 0; display: flex; flex-direction: column; z-index: 500; height: 100vh; }
+    .brand { padding: 14px 16px; font-size: 1rem; font-weight: 800; border-bottom: 1px solid #2c3338; display: flex; justify-content: space-between; align-items: center; }
+    .nav-list { list-style: none; padding: 6px 0; flex: 1; overflow-y: auto; }
+    .nav-group-title { padding: 8px 16px 4px; font-size: 0.7rem; text-transform: uppercase; color: #8c8f94; font-weight: 700; }
+    .nav-item { padding: 9px 16px; font-size: 0.84rem; color: #c3c4c7; cursor: pointer; }
+    .nav-item:hover, .nav-item.active { background: var(--primary) !important; color: #fff !important; }
+    .sub-tree { padding-left: 6px; background: #15191c; max-height: 280px; overflow-y: auto; }
+    .sub-item { padding: 8px 14px; font-size: 0.78rem; color: #a7aaad; cursor: pointer; display: flex; justify-content: space-between; }
+    .sub-item:hover, .sub-item.active { color: #fff !important; background: rgba(34, 113, 177, 0.6) !important; font-weight: 600; }
+    .main-body { flex: 1; display: flex; flex-direction: column; overflow: hidden; width: 100%; }
+    .top-bar { height: 50px; background: #fff; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; padding: 0 16px; flex-shrink: 0; }
+    .editor-canvas { flex: 1; background: #fff; overflow-y: auto; padding: 20px 30px; width: 100%; }
+    .container { max-width: 860px; margin: 0 auto; width: 100%; }
+    .tab-content { display: none; }
+    .card { border: 1px solid var(--border); padding: 16px; margin-bottom: 16px; border-radius: 6px; background: #fafafa; }
+    .card-title { font-weight: 700; font-size: 0.92rem; margin-bottom: 12px; text-transform: uppercase; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+    label { display: block; font-size: 0.72rem; font-weight: 700; color: #646970; margin-bottom: 4px; text-transform: uppercase; }
+    input[type="text"], input[type="number"], textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 4px; font-size: 0.9rem; margin-bottom: 10px; font-family: inherit; }
+    textarea { height: 75px; resize: vertical; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+    .img-prev { width: 100%; height: 110px; object-fit: cover; border-radius: 4px; border: 1px solid var(--border); background: #eee; margin-bottom: 6px; }
+    .btn { padding: 8px 14px; border-radius: 4px; font-size: 0.85rem; font-weight: 600; cursor: pointer; border: 1px solid transparent; text-decoration: none; }
+    .btn-primary { background: var(--primary); color: #fff; }
+    .btn-secondary { background: #fff; border-color: var(--border); color: #2c3338; }
+    .btn-red { background: #fee2e2; border: 1px solid #ef4444; color: #b91c1c; padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; cursor: pointer; }
+    .mobile-menu-btn { display: none; background: #2271b1; color: #fff; border: none; padding: 6px 10px; border-radius: 4px; font-size: 0.85rem; font-weight: 700; cursor: pointer; margin-right: 8px; }
+    .sidebar-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 450; }
+    @media (max-width: 920px) {
+      body { flex-direction: column; overflow: auto; }
+      .mobile-menu-btn { display: inline-block; }
+      .sidebar-left { position: fixed; top: 0; left: -320px; width: 290px; height: 100vh; transition: left 0.25s ease; }
+      .sidebar-left.open { left: 0 !important; }
+      .sidebar-overlay.open { display: block !important; }
+      .editor-canvas { padding: 12px; }
+      .grid-2, .grid-3 { grid-template-columns: 1fr !important; }
+    }
+  </style>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  "name": "JNN Factory",
+  "url": "https://jnnfactory.online",
+  "logo": "/img/logo.png",
+  "description": "Производитель очков и оборудования для производства"
+}
+</script></head>
+<body>
+  <div class="sidebar-overlay" id="side-overlay" onclick="toggleMenu()"></div>
+  <aside class="sidebar-left" id="sidebar-menu">
+    <div class="brand">JNN Factory CMS <button onclick="toggleMenu()" style="background:none; border:none; color:#fff; font-size:1.2rem; cursor:pointer;">✕</button></div>
+    <ul class="nav-list">
+      <li class="nav-group-title">Лендинг</li>
+      <li class="nav-item active" id="nav_hero" onclick="switchTab('hero')">🎬 1. Видеофон & Hero</li>
+      <li class="nav-item" id="nav_cycle" onclick="switchTab('cycle')">⚙️ 2. Цикл производства</li>
+      <li class="nav-item" id="nav_print" onclick="switchTab('print')">🎨 3. Шелкография M&R</li>
+      <li class="nav-item" id="nav_steps" onclick="switchTab('steps')">📋 4. Этапы и Выгоды</li>
+      <li class="nav-group-title" style="display:flex; justify-content:space-between; align-items:center;">
+        <span>Каталог (все 12)</span>
+        <button onclick="createNewProduct()" style="background:#22c55e; color:#fff; border:none; padding:2px 8px; border-radius:3px; font-size:0.7rem; cursor:pointer;">+ ДОБАВИТЬ</button>
+      </li>
+      <div id="catalog-tree" class="sub-tree"></div>
+      <li class="nav-group-title">Служебные</li>
+      <li class="nav-item" id="nav_seo" onclick="switchTab('seo')">🔍 5. SEO & Метаданные</li>
+      <li class="nav-item" id="nav_contacts" onclick="switchTab('contacts')">📞 6. Контакты & Лиды</li>
+    </ul>
+  </aside>
+
+  <div class="main-body">
+    <header class="top-bar">
+      <div style="display:flex; align-items:center;">
+        <button class="mobile-menu-btn" onclick="toggleMenu()">☰ Меню</button>
+        <div id="breadcrumb" style="font-weight:600; color:#50575e;">Раздел: 🎬 1. Видеофон & Hero</div>
+      </div>
+      <div style="display:flex; align-items:center; gap:8px;">
+        <span id="status-msg" style="font-weight:700; font-size:0.8rem;"></span>
+        <a href="https://jnnfactory.online" target="_blank" class="btn btn-secondary">Сайт ↗</a>
+        <button class="btn btn-primary" onclick="publishData()">Опубликовать</button>
+      </div>
+    </header>
+
+    <main class="editor-canvas">
+      <div class="container">
+        <!-- HERO -->
+        <div id="tab_hero" class="tab-content" style="display:block;">
+          <div class="card">
+            <div class="card-title">1. Видеофон & Оффер</div>
+            <label>Ссылка на YouTube Shorts:</label><input type="text" id="h_v_url">
+            <label>Торговое предложение:</label><textarea id="h_desc"></textarea>
+          </div>
+        </div>
+
+        <!-- ЦИКЛ -->
+        <div id="tab_cycle" class="tab-content">
+          <div class="card">
+            <div class="card-title">2. Цикл производства</div>
+            <label>Шаг 1:</label><input type="text" id="c1_t"><textarea id="c1_d"></textarea>
+            <label>Шаг 2:</label><input type="text" id="c2_t"><textarea id="c2_d"></textarea>
+            <label>Шаг 3:</label><input type="text" id="c3_t"><textarea id="c3_d"></textarea>
+            <label>Шаг 4:</label><input type="text" id="c4_t"><textarea id="c4_d"></textarea>
+          </div>
+        </div>
+
+        <!-- ШЕЛКОГРАФИЯ -->
+        <div id="tab_print" class="tab-content">
+          <div class="card">
+            <div class="card-title">3. Шелкография M&R Sportsman</div>
+            <label>Заголовок:</label><input type="text" id="p_title">
+            <label>Описание:</label><textarea id="p_desc"></textarea>
+            <label>Преимущество 1:</label><input type="text" id="p_b1">
+            <label>Преимущество 2:</label><input type="text" id="p_b2">
+            <label>Преимущество 3:</label><input type="text" id="p_b3">
+          </div>
+        </div>
+
+        <!-- ЭТАПЫ -->
+        <div id="tab_steps" class="tab-content">
+          <div class="card">
+            <div class="card-title">4. Этапы и Выгоды</div>
+            <label>Этап 1:</label><input type="text" id="st_1">
+            <label>Этап 2:</label><input type="text" id="st_2">
+            <label>Этап 3:</label><input type="text" id="st_3">
+            <label>Этап 4:</label><input type="text" id="st_4">
+          </div>
+        </div>
+
+        <!-- КАРТОЧКА ТОВАРА -->
+        <div id="tab_product" class="tab-content">
+          <div class="card">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; border-bottom:1px solid var(--border); padding-bottom:8px;">
+              <strong id="prod_header_title" style="font-size:1.05rem;">Редактирование товара</strong>
+              <button type="button" class="btn-red" onclick="deleteCurrentProduct()">✕ Удалить</button>
+            </div>
+            <div class="card-title">3 Ракурса Фото</div>
+            <div class="grid-3">
+              <div>
+                <label>Фото 1 (Лицо):</label>
+                <img id="cur_p_prev1" class="img-prev" src="/assets/letuchka_nurlan.jpg">
+                <input type="file" id="file_inp_1" style="display:none;" accept="image/*" onchange="uploadProductImage(this, 1)">
+                <div style="display:flex; gap:4px; margin-bottom:6px;">
+                  <button type="button" class="btn btn-secondary" style="flex:1;" onclick="document.getElementById('file_inp_1').click()">📁 Загрузить</button>
+                  <button type="button" class="btn-red" onclick="deleteMedia(1)">✕</button>
+                </div>
+                <input type="text" id="cur_p_img1" onchange="document.getElementById('cur_p_prev1').src=this.value">
+                <label>Alt (SEO):</label><input type="text" id="cur_p_alt1">
+              </div>
+              <div>
+                <label>Фото 2 (Детали):</label>
+                <img id="cur_p_prev2" class="img-prev" src="/assets/letuchka_nurlan.jpg">
+                <input type="file" id="file_inp_2" style="display:none;" accept="image/*" onchange="uploadProductImage(this, 2)">
+                <div style="display:flex; gap:4px; margin-bottom:6px;">
+                  <button type="button" class="btn btn-secondary" style="flex:1;" onclick="document.getElementById('file_inp_2').click()">📁 Загрузить</button>
+                  <button type="button" class="btn-red" onclick="deleteMedia(2)">✕</button>
+                </div>
+                <input type="text" id="cur_p_img2" onchange="document.getElementById('cur_p_prev2').src=this.value">
+                <label>Alt (SEO):</label><input type="text" id="cur_p_alt2">
+              </div>
+              <div>
+                <label>Фото 3 (Спина):</label>
+                <img id="cur_p_prev3" class="img-prev" src="/assets/letuchka_nurlan.jpg">
+                <input type="file" id="file_inp_3" style="display:none;" accept="image/*" onchange="uploadProductImage(this, 3)">
+                <div style="display:flex; gap:4px; margin-bottom:6px;">
+                  <button type="button" class="btn btn-secondary" style="flex:1;" onclick="document.getElementById('file_inp_3').click()">📁 Загрузить</button>
+                  <button type="button" class="btn-red" onclick="deleteMedia(3)">✕</button>
+                </div>
+                <input type="text" id="cur_p_img3" onchange="document.getElementById('cur_p_prev3').src=this.value">
+                <label>Alt (SEO):</label><input type="text" id="cur_p_alt3">
+              </div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-title">Характеристики</div>
+            <div class="grid-2">
+              <div><label>Наименование:</label><input type="text" id="cur_p_name"></div>
+              <div><label>Бейдж:</label><input type="text" id="cur_p_badge"></div>
+            </div>
+            <label>Артикул:</label><input type="text" id="cur_p_code">
+            <label>Описание фасона:</label><textarea id="cur_p_sub" style="height:55px;"></textarea>
+            <label>Полотно и плотность:</label><textarea id="cur_p_bullets" style="height:85px;"></textarea>
+            <label>Оптовая цена от (сом):</label><input type="number" id="cur_p_price">
+            <label>Блок FAQ / Условия:</label><textarea id="cur_p_faq" style="height:90px;"></textarea>
+          </div>
+        </div>
+
+        <!-- SEO -->
+        <div id="tab_seo" class="tab-content">
+          <div class="card">
+            <div class="card-title">5. SEO & Метаданные</div>
+            <label>Title:</label><input type="text" id="s_title">
+            <label>Description:</label><textarea id="s_desc"></textarea>
+            <label>Keywords:</label><input type="text" id="s_key">
+          </div>
+        </div>
+
+        <!-- КОНТАКТЫ -->
+        <div id="tab_contacts" class="tab-content">
+          <div class="card">
+            <div class="card-title">6. Контакты</div>
+            <label>Телефон:</label><input type="text" id="cnt_p">
+            <label>WhatsApp:</label><input type="text" id="cnt_w">
+            <label>Telegram:</label><input type="text" id="cnt_t">
+            <label>Адрес в Бишкеке:</label><input type="text" id="cnt_a">
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    var db = { products: [] };
+    var activeProdIndex = 0;
+
+    function toggleMenu() {
+      document.getElementById('sidebar-menu').classList.toggle('open');
+      document.getElementById('side-overlay').classList.toggle('open');
+    }
+
+    function hideAllTabs() {
+      var tabs = document.querySelectorAll('.tab-content');
+      for (var i = 0; i < tabs.length; i++) { tabs[i].style.display = 'none'; }
+    }
+
+    function switchTab(tabKey) {
+      toggleMenu();
+      document.querySelectorAll('.nav-item').forEach(function(el) { el.classList.remove('active'); });
+      document.querySelectorAll('.sub-item').forEach(function(el) { el.classList.remove('active'); });
+      hideAllTabs();
+
+      var navEl = document.getElementById('nav_' + tabKey);
+      if (navEl) navEl.classList.add('active');
+
+      var target = document.getElementById('tab_' + tabKey);
+      if (target) target.style.display = 'block';
+
+      document.getElementById('breadcrumb').textContent = 'Раздел: ' + tabKey;
+    }
+
+    function openProduct(idx) {
+      if (document.getElementById('sidebar-menu').classList.contains('open')) {
+        toggleMenu();
+      }
+      activeProdIndex = idx;
+      document.querySelectorAll('.nav-item').forEach(function(el) { el.classList.remove('active'); });
+      document.querySelectorAll('.sub-item').forEach(function(el) { el.classList.remove('active'); });
+
+      var subItems = document.querySelectorAll('.sub-item');
+      if (subItems[idx]) subItems[idx].classList.add('active');
+
+      hideAllTabs();
+      var prodTab = document.getElementById('tab_product');
+      if (prodTab) prodTab.style.display = 'block';
+
+      var p = db.products[idx] || {};
+      document.getElementById('prod_header_title').textContent = 'Товар #' + (idx + 1) + ': ' + (p.name || '');
+      document.getElementById('cur_p_name').value = p.name || '';
+      document.getElementById('cur_p_badge').value = p.badge || '';
+      document.getElementById('cur_p_code').value = p.code || '';
+      document.getElementById('cur_p_sub').value = p.subtitle || '';
+      document.getElementById('cur_p_bullets').value = p.bullets || '';
+      document.getElementById('cur_p_price').value = p.price || 0;
+      document.getElementById('cur_p_faq').value = p.faq || '';
+
+      document.getElementById('cur_p_img1').value = p.img_1 || '';
+      document.getElementById('cur_p_alt1').value = p.alt_1 || '';
+      document.getElementById('cur_p_prev1').src = p.img_1 || '/assets/letuchka_nurlan.jpg';
+
+      document.getElementById('cur_p_img2').value = p.img_2 || '';
+      document.getElementById('cur_p_alt2').value = p.alt_2 || '';
+      document.getElementById('cur_p_prev2').src = p.img_2 || '/assets/letuchka_nurlan.jpg';
+
+      document.getElementById('cur_p_img3').value = p.img_3 || '';
+      document.getElementById('cur_p_alt3').value = p.alt_3 || '';
+      document.getElementById('cur_p_prev3').src = p.img_3 || '/assets/letuchka_nurlan.jpg';
+
+      document.getElementById('breadcrumb').textContent = 'Товар > ' + (p.name || '');
+    }
+
+    function renderCatalogTree() {
+      var tree = document.getElementById('catalog-tree');
+      tree.innerHTML = '';
+      (db.products || []).forEach(function(p, index) {
+        var div = document.createElement('div');
+        div.className = 'sub-item' + (index === activeProdIndex ? ' active' : '');
+        div.innerHTML = '<span>👕 ' + (p.name || 'Товар') + '</span><small>' + (p.price || 0) + 'с</small>';
+        div.onclick = function() { openProduct(index); };
+        tree.appendChild(div);
+      });
+    }
+
+    function deleteMedia(num) {
+      document.getElementById('cur_p_img' + num).value = '';
+      document.getElementById('cur_p_prev' + num).src = '/assets/letuchka_nurlan.jpg';
+      if (db.products && db.products[activeProdIndex]) {
+        db.products[activeProdIndex]['img_' + num] = '';
+      }
+    }
+
+    function uploadProductImage(fileInput, num) {
+      var file = fileInput.files[0];
+      if (!file) return;
+      var formData = new FormData();
+      formData.append('file', file);
+      var msg = document.getElementById('status-msg');
+      msg.textContent = 'Загрузка...';
+
+      fetch('/api/upload', { method: 'POST', body: formData })
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+          document.getElementById('cur_p_img' + num).value = data.url;
+          document.getElementById('cur_p_prev' + num).src = data.url;
+          if (db.products && db.products[activeProdIndex]) {
+            db.products[activeProdIndex]['img_' + num] = data.url;
+          }
+          msg.textContent = '✓ Загружено';
+          setTimeout(function() { msg.textContent = ''; }, 2000);
+        });
+    }
+
+    function createNewProduct() {
+      db.products.push({
+        name: "Новая позиция", price: 500, img_1: "/assets/letuchka_nurlan.jpg",
+        bullets: "• 100% хлопок", faq: "Партии от 500 шт"
+      });
+      renderCatalogTree();
+      openProduct(db.products.length - 1);
+    }
+
+    function deleteCurrentProduct() {
+      if (confirm('Удалить позицию?')) {
+        db.products.splice(activeProdIndex, 1);
+        renderCatalogTree();
+        if (db.products.length > 0) openProduct(0);
+        else switchTab('hero');
+      }
+    }
+
+    function loadFormData() {
+      fetch('/api/content?t=' + Date.now())
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          db = data || {};
+          if (!db.products) db.products = [];
+
+          document.getElementById('h_v_url').value = db.hero?.video_url || '';
+          document.getElementById('h_desc').value = db.hero?.desc || '';
+
+          document.getElementById('c1_t').value = db.cycle?.s1_t || ''; document.getElementById('c1_d').value = db.cycle?.s1_d || '';
+          document.getElementById('c2_t').value = db.cycle?.s2_t || ''; document.getElementById('c2_d').value = db.cycle?.s2_d || '';
+          document.getElementById('c3_t').value = db.cycle?.s3_t || ''; document.getElementById('c3_d').value = db.cycle?.s3_d || '';
+          document.getElementById('c4_t').value = db.cycle?.s4_t || ''; document.getElementById('c4_d').value = db.cycle?.s4_d || '';
+
+          document.getElementById('p_title').value = db.print?.title || '';
+          document.getElementById('p_desc').value = db.print?.desc || '';
+          document.getElementById('p_b1').value = db.print?.b1 || '';
+          document.getElementById('p_b2').value = db.print?.b2 || '';
+          document.getElementById('p_b3').value = db.print?.b3 || '';
+
+          document.getElementById('st_1').value = db.steps?.st1 || '';
+          document.getElementById('st_2').value = db.steps?.st2 || '';
+          document.getElementById('st_3').value = db.steps?.st3 || '';
+          document.getElementById('st_4').value = db.steps?.st4 || '';
+
+          document.getElementById('s_title').value = db.seo?.title || '';
+          document.getElementById('s_desc').value = db.seo?.desc || '';
+          document.getElementById('s_key').value = db.seo?.keywords || '';
+
+          document.getElementById('cnt_p').value = db.contacts?.phone || '';
+          document.getElementById('cnt_w').value = db.contacts?.whatsapp || '';
+          document.getElementById('cnt_t').value = db.contacts?.telegram || '';
+          document.getElementById('cnt_a').value = db.contacts?.address || '';
+
+          renderCatalogTree();
+        });
+    }
+
+    function publishData() {
+      var msg = document.getElementById('status-msg');
+      msg.textContent = 'Сохранение...';
+
+      if (!db.hero) db.hero = {};
+      db.hero.video_url = document.getElementById('h_v_url').value;
+      db.hero.desc = document.getElementById('h_desc').value;
+
+      if (!db.cycle) db.cycle = {};
+      db.cycle.s1_t = document.getElementById('c1_t').value; db.cycle.s1_d = document.getElementById('c1_d').value;
+      db.cycle.s2_t = document.getElementById('c2_t').value; db.cycle.s2_d = document.getElementById('c2_d').value;
+      db.cycle.s3_t = document.getElementById('c3_t').value; db.cycle.s3_d = document.getElementById('c3_d').value;
+      db.cycle.s4_t = document.getElementById('c4_t').value; db.cycle.s4_d = document.getElementById('c4_d').value;
+
+      if (!db.print) db.print = {};
+      db.print.title = document.getElementById('p_title').value;
+      db.print.desc = document.getElementById('p_desc').value;
+      db.print.b1 = document.getElementById('p_b1').value;
+      db.print.b2 = document.getElementById('p_b2').value;
+      db.print.b3 = document.getElementById('p_b3').value;
+
+      if (db.products && db.products[activeProdIndex]) {
+        var cp = db.products[activeProdIndex];
+        cp.badge = document.getElementById('cur_p_badge').value;
+        cp.name = document.getElementById('cur_p_name').value;
+        cp.code = document.getElementById('cur_p_code').value;
+        cp.subtitle = document.getElementById('cur_p_sub').value;
+        cp.bullets = document.getElementById('cur_p_bullets').value;
+        cp.price = Number(document.getElementById('cur_p_price').value);
+        cp.faq = document.getElementById('cur_p_faq').value;
+        cp.img_1 = document.getElementById('cur_p_img1').value;
+        cp.alt_1 = document.getElementById('cur_p_alt1').value;
+        cp.img_2 = document.getElementById('cur_p_img2').value;
+        cp.alt_2 = document.getElementById('cur_p_alt2').value;
+        cp.img_3 = document.getElementById('cur_p_img3').value;
+        cp.alt_3 = document.getElementById('cur_p_alt3').value;
+      }
+
+      if (!db.contacts) db.contacts = {};
+      db.contacts.phone = document.getElementById('cnt_p').value;
+      db.contacts.whatsapp = document.getElementById('cnt_w').value;
+      db.contacts.telegram = document.getElementById('cnt_t').value;
+      db.contacts.address = document.getElementById('cnt_a').value;
+
+      fetch('/api/content', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(db)
+      }).then(function() {
+        msg.textContent = '✓ Сохранено!';
+        setTimeout(function() { msg.textContent = ''; }, 2500);
+      });
+    }
+
+    window.onload = loadFormData;
+  </script>
+</body>
+</html>

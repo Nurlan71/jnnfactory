@@ -1,20 +1,15 @@
-# Dependencies
-node_modules/
-package-lock.json
-
-# Build outputs
-dist/
-*.min.css
-*.min.js
-
-# Tilda assets (they are no longer needed in git, as we use our own CSS)
-assets/tildaws/
-
-# Logs
-*.log
-
-# Environment variables
-.env
-
-# Ignore admin folder (for now, we will delete later)
-admin/
+# Dependencies 
+node_modules/ 
+venv/ 
+package-lock.json 
+# Python 
+__pycache__/ 
+*.pyc 
+# Build 
+dist/ 
+*.min.css 
+*.min.js 
+# Logs 
+*.log 
+# Environment 
+.env 
