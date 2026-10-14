@@ -5,7 +5,7 @@ from fastapi.staticfiles import StaticFiles
 
 app = FastAPI(title="JNN Factory Enterprise Engine")
 DATA_FILE = "/var/www/jnnfactory/admin/site_data.json"
-ADMIN_HTML = "/var/www/jnnfactory/admin/admin.html"
+ADMIN_HTML = "/var/www/jnnfactory/admin/index.html"
 INDEX_FILE = "/var/www/jnnfactory/index.html"
 ASSETS_DIR = "/var/www/jnnfactory/assets"
 
@@ -101,3 +101,23 @@ async def post_settings():
 @app.get("/api/categories")
 async def get_cats():
     return ["Производство одежды", "Шелкография", "СТМ бренды"]
+
+@app.get("/api/catalog")
+async def get_catalog():
+    if os.path.exists(DATA_FILE):
+        with open(DATA_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data.get("products", [])
+    return []
+
+@app.post("/api/catalog")
+async def update_catalog(payload: dict):
+    if os.path.exists(DATA_FILE):
+        with open(DATA_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    else:
+        data = {}
+    data["products"] = payload.get("products", [])
+    with open(DATA_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+    return {"status": "saved"}

@@ -651,7 +651,7 @@
         </div>
       </div>
 
-      <!-- 12. Костюм двойка -->
+      <!-- 12. Костюм двойка с кантом -->
       <div class="cat-card">
         <a class="cat-img" href="/kostum-dvoyka-kantom.html"><img src="/assets/2.jpg" alt="Костюм двойка с кантом женский"></a>
         <div class="cat-body">
@@ -666,6 +666,25 @@
           <div class="cat-price">
             <span class="price">от 1750 <small>сом</small></span>
             <a class="cat-link" href="/kostum-dvoyka-kantom.html">Подробнее →</a>
+          </div>
+        </div>
+      </div>
+
+      <!-- 13. Костюм вельветовый двойка -->
+      <div class="cat-card">
+        <a class="cat-img" href="/velvet-suit.html"><img src="/assets/letuchka_nurlan.jpg" alt="Костюм вельветовый двойка"></a>
+        <div class="cat-body">
+          <div class="cat-art">JNN-W-ST-001 · Костюмы</div>
+          <h3>Костюм вельветовый двойка</h3>
+          <p class="cat-desc">Рубашка свободного кроя на пуговицах + брюки палаццо на резинке. Высокая маржинальность для селлеров.</p>
+          <div class="cat-specs">
+            <div>Ткань: <b>Микровельвет Турция пенье</b></div>
+            <div>Состав: <b>хлопок/полиэстер</b> · 290 г/м²</div>
+            <div>Размеры: <b>42 - 48</b></div>
+          </div>
+          <div class="cat-price">
+            <span class="price">от 1420 <small>сом</small></span>
+            <a class="cat-link" href="/velvet-suit.html">Подробнее →</a>
           </div>
         </div>
       </div>
@@ -873,6 +892,8 @@
   </div>
 </footer>
 
+<!-- JNN Dynamic Catalog: Template Card Pattern (renders from Directus) -->
+<script src="/assets/js/catalog-dynamic.js"></script>
 
 <!-- JNN Stock & CMS Mount Agent (Zero-Destruction Pattern) -->
 <script>
@@ -887,12 +908,23 @@
       }
     }).catch(()=>{});
 
-  // 2. Получаем данные склада без раскрытия себестоимости
-  fetch('/api/stock/velvet-640')
+  // 2. Обновляем ссылки и изображения карточек из Directus
+  fetch('https://admin.jnnfactory.online/items/products')
     .then(r => r.json())
-    .then(stock => {
-      // Ищем блок вельвета или контейнер каталога
-      console.log('Stock API active: 640 units ready for shipment');
+    .then(res => {
+      const products = res.data || [];
+      products.forEach(p => {
+        const card = document.querySelector(`.cat-card:has(h3:text-is("${p.name}"))`);
+        if (!card) return;
+        const imgEl = card.querySelector('.cat-img img');
+        const linkEls = card.querySelectorAll('.cat-img, .cat-link');
+        // Берём первое фото, если через запятую
+        const firstImg = (p.image || '').split(',')[0].trim();
+        if (imgEl && firstImg) imgEl.src = firstImg;
+        // Обновляем ссылку на детальную страницу по slug
+        const slug = p.slug || p.code?.toLowerCase().replace(/\s+/g, '-');
+        if (slug) linkEls.forEach(a => a.href = '/' + slug + '.html');
+      });
     }).catch(()=>{});
 })();
 </script>
