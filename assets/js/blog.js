@@ -1,5 +1,7 @@
-// JNN Blog v1 — вывод статей из Directus (/api/items/blog_posts)
+// JNN Blog v2 — вывод статей из Directus (/api/items/blog_posts)
 // Список: элемент [data-jnn-blog]. Детальная: [data-jnn-blog-post] (по ?slug=)
+// Ссылки ведут на статические страницы /blog/<slug>.html, если в записи
+// blog_posts не указано поле url (например, /blog-post.html?slug=...).
 // Fallback: при недоступности API контейнер остаётся пустым, статическая вёрстка цела.
 (function () {
   'use strict';
@@ -31,6 +33,12 @@
     return '/' + u;
   }
 
+  // Внутренние ссылки держим относительными: абсолютный адрес из CMS
+  // приводим к виду /path (тот же URL, но без зависимости от домена).
+  function local(u) {
+    return String(u || '').replace(/^https?:\/\/[^/]+/i, '');
+  }
+
   function esc(s) {
     return String(s == null ? '' : s)
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -47,7 +55,7 @@
       // Статьи отдаются по понятным статическим адресам /blog/<slug>.html:
       // поле url в blog_posts переопределяет ссылку (например, на динамическую
       // страницу /blog-post.html?slug=..., если статической версии нет).
-      card.href = p.url ? abs(p.url) : '/blog/' + encodeURIComponent(p.slug || '') + '.html';
+      card.href = p.url ? local(p.url) : '/blog/' + encodeURIComponent(p.slug || '') + '.html';
 
       var cover = el('div', 'blog-cover');
       if (p.cover) {
