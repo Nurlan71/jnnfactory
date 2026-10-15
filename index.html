@@ -1282,7 +1282,7 @@
 <script>
 (function() {
   // 1. Синхронизируем мета-теги из CMS
-  fetch('/api/content')
+  fetch('data:application/json,{}')/* старый /api/content отключён: контент берёт site-content.js */
     .then(r => r.json())
     .then(data => {
       if (data.seo?.title) document.title = data.seo.title;
@@ -1316,7 +1316,7 @@
 <script>
 document.addEventListener('DOMContentLoaded', async () => {
   try {
-    const res = await fetch('/api/content');
+    const res = await fetch('data:application/json,{}')/* старый /api/content отключён: контент берёт site-content.js */;
     if (!res.ok) return;
     const data = await res.json();
 
@@ -1346,7 +1346,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 <script>
 // JNN Live Sync: мгновенная подгрузка данных из CMS
-fetch('/api/content')
+fetch('data:application/json,{}')/* старый /api/content отключён: контент берёт site-content.js */
   .then(res => res.json())
   .then(data => {
     if (data.hero?.desc) {
@@ -1369,7 +1369,7 @@ fetch('/api/content')
 
 <script>
 (function syncJNN() {
-  fetch('/api/content?t=' + Date.now())
+  fetch('data:application/json,{}')/* старый /api/content отключён: контент берёт site-content.js */
     .then(r => r.json())
     .then(d => {
       if (d.hero?.desc) {
@@ -1388,7 +1388,7 @@ fetch('/api/content')
 <!-- JNN Live Sync Engine (Hermes Client Hydration) -->
 <script>
 (function() {
-  fetch('/api/content?t=' + Date.now())
+  fetch('data:application/json,{}')/* старый /api/content отключён: контент берёт site-content.js */
     .then(function(r) { return r.json(); })
     .then(function(d) {
       if (d.hero && d.hero.desc) {
@@ -1444,7 +1444,7 @@ function renderJNNVideo(type, url, overlay) {
 }
 
 // Автозапуск при загрузке страницы
-fetch('/api/content?t=' + Date.now())
+fetch('data:application/json,{}')/* старый /api/content отключён: контент берёт site-content.js */
   .then(function(r){ return r.json(); })
   .then(function(d){
     if (d.hero) {
