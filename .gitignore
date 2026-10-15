@@ -24,3 +24,6 @@ replace-css.js
 replace-tilda-css.bat
 add-schema.js
 setup-tailwind.ps1
+
+# Отчёты прогонов агентов
+reports/
