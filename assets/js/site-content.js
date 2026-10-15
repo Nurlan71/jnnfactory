@@ -169,7 +169,16 @@
       }
     }
 
-    setHref('a[href*="wa.me"]', d.whatsapp);
+    // WhatsApp: номер берём из CMS, но готовый текст сообщения (?text=) сохраняем.
+    var waBase = safeText(d.whatsapp).replace(/[?&]text=.*$/, '');
+    if (waBase) {
+      var was = document.querySelectorAll('a[href*="wa.me"]');
+      for (var w = 0; w < was.length; w++) {
+        var wh = was[w].getAttribute('href') || '';
+        var wt = wh.match(/[?&]text=([^&]*)/);
+        was[w].setAttribute('href', wt ? waBase + '?text=' + wt[1] : waBase);
+      }
+    }
     setHref('a[href*="t.me/jnnfactory"]:not([href*="bot"])', d.telegram);
 
     var email = safeText(d.email);
