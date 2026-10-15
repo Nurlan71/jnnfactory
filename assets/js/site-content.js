@@ -191,9 +191,12 @@
     setText('[data-jnn="email"]', d.email);
 
     // Простые footers (на всех страницах): копирайт сразу из настроек.
+    // Строки, где © и реквизиты в одном абзаце, оставляем для полной пересборки
+    // в applyFooterAbout (чтобы не потерять реквизиты).
     var fps = document.querySelectorAll('footer p');
     for (var q = 0; q < fps.length; q++) {
-      if (/©/.test(fps[q].textContent) && safeText(d.copyright)) fps[q].textContent = safeText(d.copyright);
+      var ft = fps[q].textContent;
+      if (/©/.test(ft) && !/(Айдана|ИНН|jnnwear)/.test(ft) && safeText(d.copyright)) fps[q].textContent = safeText(d.copyright);
     }
 
     console.log('JNN SiteContent: site_settings применены');
