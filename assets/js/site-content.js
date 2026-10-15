@@ -3,7 +3,7 @@
 (function () {
   'use strict';
 
-  var API_URL = 'https://admin.jnnfactory.online/items/site_settings?fields=*';
+  var API_URL = '/api/items/site_settings?fields=*';
 
   function safeText(val) {
     if (val === null || val === undefined) return '';
@@ -102,5 +102,3 @@
       console.warn('JNN SiteContent: API недоступен, использую статику (' + err.message + ')');
     });
 })();
-
-</content>
