@@ -1,9 +1,10 @@
-// JNN Site Content Sync v5 — тексты главной страницы из Directus
-// Источники: /api/items/site_settings и /api/items/pages_content (slug=home)
+// JNN Site Content Sync v10 — тексты страниц сайта из Directus
+// Источники: /api/items/site_settings, /api/items/pages_content (slug=home),
+//            /api/items/pages + /api/items/page_sections (все остальные страницы)
 //
 // ПРИНЦИП: вёрстка и CSS не меняются. Скрипт находит существующие DOM-узлы
-// по селекторам и обновляет ТОЛЬКО их текст, сохраняя вложенные элементы
-// оформления (цветной «+», слоган в <b>, подпись «Контактное лицо» в <b>).
+// по селекторам и по ключам data-jnn и обновляет ТОЛЬКО их текст, сохраняя
+// вложенные элементы оформления (цветной «+», слоган в <b>, подпись в <b>).
 // Fallback: если API недоступен или поле пустое — на странице остаётся
 // исходный текст из HTML.
 (function () {
@@ -341,6 +342,96 @@
     if (applied) console.log('JNN SiteContent: pages_content применён (' + applied + ' блоков)');
   }
 
+  /* ---------- страницы сайта: pages + page_sections ---------- */
+
+  // Текущий путь приводим к тому виду, в котором он хранится в CMS:
+  //   /about.html → /about,  /blog/ → /blog/index,  / → /
+  function normPath(p) {
+    p = String(p || '/').split('?')[0].split('#')[0];
+    try { p = decodeURIComponent(p); } catch (e) {}
+    if (p.length > 1 && p.charAt(p.length - 1) === '/') p += 'index';
+    p = p.replace(/\.html$/, '');
+    if (p === '' || p === '/index') p = '/';
+    return p;
+  }
+
+  function looksLikeHtml(v) { return /<[a-z!/][\s\S]*?>/i.test(v); }
+
+  // Подставляет значение в ВСЕ узлы с этим ключом (h1 бывает и в шапке, и в тексте).
+  function applyRich(key, value) {
+    var v = safeText(value);
+    if (!v) return 0;
+    var els = document.querySelectorAll('[data-jnn="' + key + '"]');
+    if (!els.length) return 0;
+    var html = looksLikeHtml(v);
+    for (var i = 0; i < els.length; i++) {
+      if (html) els[i].innerHTML = v;
+      else els[i].textContent = v;
+    }
+    return els.length;
+  }
+
+  function setMeta(selector, value) {
+    var v = safeText(value);
+    if (!v) return;
+    var el = document.querySelector(selector);
+    if (el) el.setAttribute('content', v);
+  }
+
+  function applyPage(page, sections) {
+    if (!page) return;
+    var n = 0;
+    n += applyRich('page_h1', page.h1);
+    n += applyRich('page_subtitle', page.subtitle);
+
+    var t = safeText(page.seo_title);
+    if (t) {
+      document.title = t;
+      setMeta('meta[property="og:title"]', t);
+      setMeta('meta[name="twitter:title"]', t);
+    }
+    var d = safeText(page.seo_description);
+    if (d) {
+      setMeta('meta[name="description"]', d);
+      setMeta('meta[property="og:description"]', d);
+      setMeta('meta[name="twitter:description"]', d);
+    }
+
+    (sections || []).forEach(function (s) {
+      if (s && s.key) n += applyRich(s.key, s.content);
+    });
+
+    if (n) console.log('JNN SiteContent: страница «' + safeText(page.title) + '» — узлов обновлено: ' + n);
+  }
+
+  function loadPage() {
+    var path = normPath(window.location.pathname);
+    var candidates = [path];
+    if (/\/index$/.test(path)) candidates.push(path.replace(/\/index$/, ''));
+    if (path === '/') candidates.push('/index');
+
+    function attempt(i) {
+      if (i >= candidates.length) return Promise.resolve();
+      var url = '/api/items/pages?limit=1'
+        + '&fields=id,title,slug,path,h1,subtitle,seo_title,seo_description'
+        + '&filter[path][_eq]=' + encodeURIComponent(candidates[i]);
+      return fetch(url)
+        .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+        .then(function (j) {
+          var page = firstRecord(j);
+          if (!page) return attempt(i + 1);
+          return fetch('/api/items/page_sections?limit=300&sort=sort&fields=key,kind,content'
+              + '&filter[page][_eq]=' + page.id)
+            .then(function (r2) { return r2.ok ? r2.json() : { data: [] }; })
+            .then(function (j2) { applyPage(page, j2.data || []); });
+        });
+    }
+
+    return attempt(0).catch(function (e) {
+      console.warn('JNN SiteContent: тексты страницы недоступны (' + e.message + ')');
+    });
+  }
+
   // Сначала настройки, затем контент страницы (footer_about перекрывает legal).
   fetch(SETTINGS_URL)
     .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
@@ -349,5 +440,6 @@
     .then(function () { return fetch(PAGES_URL); })
     .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
     .then(function (j) { applyPages(j.data || []); syncFaqSchema(); })
-    .catch(function (e) { console.warn('JNN SiteContent: pages_content недоступен (' + e.message + ')'); });
+    .catch(function (e) { console.warn('JNN SiteContent: pages_content недоступен (' + e.message + ')'); })
+    .then(function () { return loadPage(); });
 })();
