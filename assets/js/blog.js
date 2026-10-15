@@ -4,8 +4,8 @@
 (function () {
   'use strict';
 
-  var LIST_URL = '/api/items/blog_posts?fields=title,slug,date,cover,excerpt,body&sort=-date&limit=12';
-  var DETAIL_URL = '/api/items/blog_posts?fields=title,slug,date,cover,excerpt,body&limit=1&filter[slug][_eq]=';
+  var LIST_URL = '/api/items/blog_posts?fields=title,slug,date,cover,excerpt,body,url&sort=-date&limit=12';
+  var DETAIL_URL = '/api/items/blog_posts?fields=title,slug,date,cover,excerpt,body,url&limit=1&filter[slug][_eq]=';
 
   function el(tag, cls, text) {
     var e = document.createElement(tag);
@@ -44,7 +44,10 @@
     }
     posts.forEach(function (p) {
       var card = el('a', 'blog-card');
-      card.href = '/blog-post.html?slug=' + encodeURIComponent(p.slug || '');
+      // Статьи отдаются по понятным статическим адресам /blog/<slug>.html:
+      // поле url в blog_posts переопределяет ссылку (например, на динамическую
+      // страницу /blog-post.html?slug=..., если статической версии нет).
+      card.href = p.url ? abs(p.url) : '/blog/' + encodeURIComponent(p.slug || '') + '.html';
 
       var cover = el('div', 'blog-cover');
       if (p.cover) {

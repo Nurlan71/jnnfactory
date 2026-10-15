@@ -1,4 +1,4 @@
-// JNN Site Content Sync v10 — тексты страниц сайта из Directus
+// JNN Site Content Sync v11 — тексты страниц сайта из Directus
 // Источники: /api/items/site_settings, /api/items/pages_content (slug=home),
 //            /api/items/pages + /api/items/page_sections (все остальные страницы)
 //
@@ -289,32 +289,49 @@
   }
 
   // JSON-LD FAQPage всегда соответствует видимому тексту аккордеона:
-  // статичная разметка в <head> обновляется после подстановки данных из CMS.
+  // статичная разметка страницы обновляется после подстановки данных из CMS.
+  // Работает для ЛЮБОГО блока [data-jnn-faq] на странице (главная, услуги,
+  // товары, лендинги): целевой <script> задаётся атрибутом data-faq-schema
+  // (по умолчанию — #faq-schema, как на главной).
+  function faqSchemaId() {
+    var p = normPath(window.location.pathname).replace(/\/index$/, '/');
+    if (p === '' || p === '/index') p = '/';
+    var origin = 'https://jnnfactory.online';
+    try {
+      if (window.location.origin && /^https?:/.test(window.location.origin)) origin = window.location.origin;
+    } catch (e) {}
+    return origin + p + '#faq';
+  }
+
   function syncFaqSchema() {
-    var nodes = document.querySelectorAll('#faq .faq-item');
-    if (!nodes.length) return;
-    var qa = [];
-    for (var i = 0; i < nodes.length; i++) {
-      var qEl = nodes[i].querySelector('summary span') || nodes[i].querySelector('summary');
-      var aEl = nodes[i].querySelector('.faq-a');
-      var q = qEl ? safeText(qEl.textContent).replace(/\s+/g, ' ') : '';
-      var a = aEl ? safeText(aEl.textContent).replace(/\s+/g, ' ') : '';
-      if (q && a) qa.push({ '@type': 'Question', 'name': q, 'acceptedAnswer': { '@type': 'Answer', 'text': a } });
+    var lists = document.querySelectorAll('[data-jnn-faq]');
+    for (var k = 0; k < lists.length; k++) {
+      var nodes = lists[k].querySelectorAll('.faq-item');
+      if (!nodes.length) continue;
+      var qa = [];
+      for (var i = 0; i < nodes.length; i++) {
+        var qEl = nodes[i].querySelector('summary span') || nodes[i].querySelector('summary') || nodes[i].querySelector('h3');
+        var aEl = nodes[i].querySelector('.faq-a') || nodes[i].querySelector('p');
+        var q = qEl ? safeText(qEl.textContent).replace(/\s+/g, ' ') : '';
+        var a = aEl ? safeText(aEl.textContent).replace(/\s+/g, ' ') : '';
+        if (q && a) qa.push({ '@type': 'Question', 'name': q, 'acceptedAnswer': { '@type': 'Answer', 'text': a } });
+      }
+      if (!qa.length) continue;
+      var id = lists[k].getAttribute('data-faq-schema') || 'faq-schema';
+      var el = document.getElementById(id);
+      if (!el) {
+        el = document.createElement('script');
+        el.type = 'application/ld+json';
+        el.id = id;
+        document.head.appendChild(el);
+      }
+      el.textContent = JSON.stringify({
+        '@context': 'https://schema.org',
+        '@type': 'FAQPage',
+        '@id': faqSchemaId(),
+        'mainEntity': qa
+      }, null, 2);
     }
-    if (!qa.length) return;
-    var el = document.getElementById('faq-schema');
-    if (!el) {
-      el = document.createElement('script');
-      el.type = 'application/ld+json';
-      el.id = 'faq-schema';
-      document.head.appendChild(el);
-    }
-    el.textContent = JSON.stringify({
-      '@context': 'https://schema.org',
-      '@type': 'FAQPage',
-      '@id': 'https://jnnfactory.online/#faq',
-      'mainEntity': qa
-    }, null, 2);
   }
 
   var STRUCTURED = {
@@ -441,5 +458,6 @@
     .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
     .then(function (j) { applyPages(j.data || []); syncFaqSchema(); })
     .catch(function (e) { console.warn('JNN SiteContent: pages_content недоступен (' + e.message + ')'); })
-    .then(function () { return loadPage(); });
+    .then(function () { return loadPage(); })
+    .then(function () { syncFaqSchema(); });
 })();
