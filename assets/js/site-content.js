@@ -92,8 +92,13 @@
     var line2 = [req, safeText(SETTINGS.email), safeText(SETTINGS.phone)].filter(Boolean).join(' · ');
     for (var i = 0; i < ps.length; i++) {
       var t = ps[i].textContent;
-      if (/©/.test(t) && safeText(SETTINGS.copyright)) ps[i].textContent = safeText(SETTINGS.copyright);
-      else if (/(Айдана|ИНН\s*0|jnnwear)/.test(t) && line2) ps[i].textContent = line2;
+      if (/©/.test(t) && safeText(SETTINGS.copyright)) {
+        // Копирайт и реквизиты в одной строке — пересобираем полный юр.блок.
+        if (/(Айдана|ИНН)/.test(t)) ps[i].innerHTML = legalHTML();
+        else ps[i].textContent = safeText(SETTINGS.copyright);
+      } else if (/(Айдана|ИНН\s*0|jnnwear)/.test(t) && line2) {
+        ps[i].textContent = line2;
+      }
     }
   }
 
