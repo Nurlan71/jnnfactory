@@ -3,7 +3,7 @@
 (function () {
   'use strict';
 
-  var API_URL = 'https://admin.jnnfactory.online/items/site_global?fields=*';
+  var API_URL = 'https://admin.jnnfactory.online/items/site_settings?fields=*';
 
   function safeText(val) {
     if (val === null || val === undefined) return '';
@@ -13,31 +13,20 @@
 
   function updateText(selector, value) {
     var v = safeText(value);
-    if (!v) return; // не трогаем, если пусто
+    if (!v) return;
     var els = document.querySelectorAll(selector);
     for (var i = 0; i < els.length; i++) {
       els[i].textContent = v;
     }
   }
 
-  function updateHref(selector, value) {
-    var v = safeText(value);
-    if (!v) return;
-    var els = document.querySelectorAll(selector);
-    for (var i = 0; i < els.length; i++) {
-      els[i].setAttribute('href', v);
-    }
-  }
-
   function updatePhone(phone) {
     var p = safeText(phone);
     if (!p) return;
-    // Обновляем все tel: ссылки
     var tels = document.querySelectorAll('a[href^="tel:"]');
     var cleanPhone = p.replace(/[\s\-()]/g, '');
     for (var i = 0; i < tels.length; i++) {
       tels[i].setAttribute('href', 'tel:' + cleanPhone);
-      // Обновляем видимый текст только если он похож на телефон
       var txt = tels[i].textContent.trim();
       if (/[\+]?[0-9][\d\s\-()]{6,}/.test(txt)) {
         tels[i].textContent = p;
@@ -46,8 +35,16 @@
   }
 
   function applyData(data) {
-    if (!data || !data.data) return;
-    var d = data.data;
+    // site_settings — singleton, но API может вернуть массив или объект
+    var d = null;
+    if (data && data.data) {
+      if (Array.isArray(data.data)) {
+        d = data.data[0];
+      } else {
+        d = data.data;
+      }
+    }
+    if (!d) return;
 
     // Телефон
     updatePhone(d.phone);
@@ -95,7 +92,6 @@
     console.log('JNN SiteContent: данные применены из Directus');
   }
 
-  // Асинхронный запрос с полным fallback
   fetch(API_URL)
     .then(function (res) {
       if (!res.ok) throw new Error('HTTP ' + res.status);
@@ -103,7 +99,8 @@
     })
     .then(applyData)
     .catch(function (err) {
-      // Fallback: ничего не делаем, статическая вёрстка остаётся
       console.warn('JNN SiteContent: API недоступен, использую статику (' + err.message + ')');
     });
 })();
+
+</content>
