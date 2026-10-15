@@ -16,6 +16,12 @@
     return 'https://wa.me/' + WA_PHONE + '?text=' + encodeURIComponent(WA_PREFIX + (name || ''));
   }
 
+  // Экранирование для вставки данных CMS в разметку карточки.
+  function esc(s) {
+    return String(s === null || s === undefined ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
   function getFirstImage(imageValue) {
     if (!imageValue) return '';
     if (Array.isArray(imageValue)) {
@@ -31,8 +37,7 @@
     'х':'h','ц':'ts','ч':'ch','ш':'sh','щ':'sch','ъ':'','ы':'y','ь':'','э':'e','ю':'yu','я':'ya'
   };
 
-  function slugify(name) {
-    return (name || 'product')
+  function slugify(name) {    return (name || 'product')
       .toLowerCase()
       .replace(/[«»""''’‘]/g, '')
       .split('')
@@ -95,10 +100,21 @@
         var desc = card.querySelector('.cat-desc');
         if (desc) desc.textContent = p.description || p.subtitle || '';
 
-        // Характеристики
+        // Характеристики — как в оригинальной вёрстке: Ткань / Состав / Размеры
         var specs = card.querySelector('.cat-specs');
-        if (specs && p.bullets) {
-          specs.textContent = p.bullets;
+        if (specs) {
+          var rows = '';
+          if (p.fabric) rows += '<div>Ткань: <b>' + esc(p.fabric) + '</b></div>';
+          if (p.composition_density) {
+            var cd = String(p.composition_density);
+            var dot = cd.indexOf(' · ');
+            rows += dot > 0
+              ? '<div>Состав: <b>' + esc(cd.slice(0, dot)) + '</b>' + esc(cd.slice(dot)) + '</div>'
+              : '<div>Состав: <b>' + esc(cd) + '</b></div>';
+          }
+          if (p.sizes) rows += '<div>Размеры: <b>' + esc(p.sizes) + '</b></div>';
+          if (rows) specs.innerHTML = rows;
+          else if (p.bullets) specs.textContent = p.bullets;
         }
 
         // Фото (первое из списка). Если фото нет — подставляем заглушку-логотип.

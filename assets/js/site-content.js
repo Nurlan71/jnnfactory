@@ -269,11 +269,59 @@
     rebuildLegalBlocks();
   }
 
+  // faq — аккордеон вопросов и ответов (#faq), раздел pages_content: faq
+  function applyFaq(c) {
+    setText('#faq .sec-eyebrow', c.eyebrow);
+    setText('#faq .sec-head h2', c.title);
+    setText('#faq .sec-head p', c.subtitle);
+    var items = c.items;
+    if (Array.isArray(items)) {
+      var nodes = document.querySelectorAll('#faq .faq-item');
+      for (var i = 0; i < nodes.length && i < items.length; i++) {
+        var it = items[i] || {};
+        setElText(nodes[i].querySelector('summary span'), it.q);
+        var ans = nodes[i].querySelector('.faq-a');
+        if (ans && safeText(it.a)) ans.innerHTML = String(it.a);
+      }
+    }
+    syncFaqSchema();
+  }
+
+  // JSON-LD FAQPage всегда соответствует видимому тексту аккордеона:
+  // статичная разметка в <head> обновляется после подстановки данных из CMS.
+  function syncFaqSchema() {
+    var nodes = document.querySelectorAll('#faq .faq-item');
+    if (!nodes.length) return;
+    var qa = [];
+    for (var i = 0; i < nodes.length; i++) {
+      var qEl = nodes[i].querySelector('summary span') || nodes[i].querySelector('summary');
+      var aEl = nodes[i].querySelector('.faq-a');
+      var q = qEl ? safeText(qEl.textContent).replace(/\s+/g, ' ') : '';
+      var a = aEl ? safeText(aEl.textContent).replace(/\s+/g, ' ') : '';
+      if (q && a) qa.push({ '@type': 'Question', 'name': q, 'acceptedAnswer': { '@type': 'Answer', 'text': a } });
+    }
+    if (!qa.length) return;
+    var el = document.getElementById('faq-schema');
+    if (!el) {
+      el = document.createElement('script');
+      el.type = 'application/ld+json';
+      el.id = 'faq-schema';
+      document.head.appendChild(el);
+    }
+    el.textContent = JSON.stringify({
+      '@context': 'https://schema.org',
+      '@type': 'FAQPage',
+      '@id': 'https://jnnfactory.online/#faq',
+      'mainEntity': qa
+    }, null, 2);
+  }
+
   var STRUCTURED = {
     stats: applyStats,
     benefits: applyBenefits,
     contacts_block: applyContacts,
-    footer_about: applyFooterAbout
+    footer_about: applyFooterAbout,
+    faq: applyFaq
   };
 
   function applyPages(records) {
@@ -300,6 +348,6 @@
     .catch(function (e) { console.warn('JNN SiteContent: site_settings недоступен (' + e.message + ')'); })
     .then(function () { return fetch(PAGES_URL); })
     .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-    .then(function (j) { applyPages(j.data || []); })
+    .then(function (j) { applyPages(j.data || []); syncFaqSchema(); })
     .catch(function (e) { console.warn('JNN SiteContent: pages_content недоступен (' + e.message + ')'); });
 })();

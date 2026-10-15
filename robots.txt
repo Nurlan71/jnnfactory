@@ -1,5 +1,78 @@
+# JNN Factory — https://jnnfactory.online
+# Разрешаем индексацию всех страниц, изображений и файлов для ИИ (llms.txt).
+
 User-agent: *
 Allow: /
-Disallow: /assets/tildcdn/
+Disallow: /admin/
+Disallow: /api/
+
+# --- Поисковые системы ---
+User-agent: YandexBot
+Allow: /
+
+User-agent: YandexImages
+Allow: /
+
+User-agent: Googlebot
+Allow: /
+
+User-agent: Googlebot-Image
+Allow: /
+
+User-agent: Bingbot
+Allow: /
+
+# --- ИИ-краулеры и ассистенты (AEO / GEO) ---
+User-agent: GPTBot
+Allow: /
+
+User-agent: OAI-SearchBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Perplexity-User
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: anthropic-ai
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: Applebot
+Allow: /
+
+User-agent: Applebot-Extended
+Allow: /
+
+User-agent: CCBot
+Allow: /
+
+User-agent: Amazonbot
+Allow: /
+
+User-agent: meta-externalagent
+Allow: /
+
+User-agent: cohere-ai
+Allow: /
+
+User-agent: DuckAssistBot
+Allow: /
+
+User-agent: YouBot
+Allow: /
 
 Sitemap: https://jnnfactory.online/sitemap.xml
+
+# Описания производства для нейросетей:
+# https://jnnfactory.online/llms.txt
+# https://jnnfactory.online/llms-full.txt

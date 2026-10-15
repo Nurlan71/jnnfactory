@@ -375,6 +375,65 @@
   ]
 }
 </script>
+
+<!-- FAQPage: разметка аккордеона вопросов (генерируется из видимого текста) -->
+<script type="application/ld+json" id="faq-schema">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "@id": "https://jnnfactory.online/#faq",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "Какой минимальный тираж заказа — от 50 шт готовые модели и от 500 шт СТМ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Готовые базовые модели — футболки, худи, зип-худи, лонгсливы, свитшоты, брюки и костюмы — шьём от 50 шт. Пошив под собственным брендом (СТМ) с вашими лекалами, бирками, этикетками и упаковкой — от 500 шт. Любой цвет и размерная сетка под заказ."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Как быстро отшивается образец и запускается партия?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Образец-эталон отшиваем за 3–5 рабочих дней после согласования лекал и ткани. Серийная партия — 10–14 рабочих дней в зависимости от модели, тиража и загрузки цеха. Печать в шелкографии добавляет 2–4 дня."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Работаете ли вы по договору и с безналичной оплатой?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Да. Договор заключает ОсОО «Айдана Стайл» (ИНН 02001202310372) — предоставляем полный пакет закрывающих документов: договор, счёт, акты, накладные, счёт-фактуру. Оплата безналичная или наличными, есть расчётный счёт для РФ и Казахстана. Для постоянных клиентов возможна поэтапная оплата."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Помогаете ли с маркировкой «Честный Знак» и фулфилментом для Wildberries и Ozon?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Да. Наносим маркировку «Честный Знак», упаковываем по стандартам Wildberries и Ozon — индивидуальная упаковка, штрихкоды, маркировка коробов. Отгружаем карго напрямую на склады маркетплейсов в РФ, Беларуси и Казахстане."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Какие возможности нанесения принтов — шелкография M&R и стойкость к стиркам?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Собственный печатный цех на автоматическом трафаретном станке M&R Sportsman EX: шелкография до 12 цветов, водные, пластизолевые и вытравные краски, тиражи до 5000 шт в смену. Печать выдерживает более 50 циклов стирки. Также делаем DTF-печать, вышивку и шелкографию по футболкам, худи и свитшотам."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Как организована доставка карго в города РФ и СНГ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Отправляем карго-перевозчиками из Бишкека в Москву, Санкт-Петербург, Новосибирск, Екатеринбург, Казань, Алматы, Астану и другие города. Срок доставки — 5–12 дней. Работаем со СДЭК и доставкой до склада маркетплейса. Стоимость считаем отдельно по весу партии."
+      }
+    }
+  ]
+}
+</script>
 <style>
   :root {
     --ink: #141414;
@@ -511,6 +570,19 @@
   .blog-empty { text-align:center; color: var(--gray); font-size:15px; grid-column: 1 / -1; padding: 20px; }
   @media (max-width: 900px) { .blog-grid { grid-template-columns: 1fr; } }
 
+  /* ---------- FAQ (аккордеон, AEO) ---------- */
+  .faq-list { max-width: 880px; margin: 0 auto; display:flex; flex-direction:column; gap:12px; }
+  .faq-item { background: var(--paper); border: 1px solid var(--line); border-radius: 14px; transition: border-color .2s, box-shadow .2s; }
+  .faq-item[open] { border-color: var(--accent); box-shadow: 0 14px 34px rgba(20,20,20,0.07); }
+  .faq-item summary { list-style:none; cursor:pointer; position:relative; padding: 20px 58px 20px 22px; font-size:16px; font-weight:700; line-height:1.35; letter-spacing:-0.01em; }
+  .faq-item summary::-webkit-details-marker { display:none; }
+  .faq-item summary::after { content:"+"; position:absolute; right:22px; top:50%; transform: translateY(-50%); color: var(--accent); font-size:24px; font-weight:700; line-height:1; }
+  .faq-item[open] summary::after { content:"–"; }
+  .faq-item summary:hover { color: var(--accent); }
+  .faq-a { padding: 0 22px 22px; color: var(--gray); font-size:14.5px; line-height:1.65; }
+  .faq-a b { color: #2b2b2b; }
+  .faq-cta { text-align:center; margin-top:32px; }
+
   /* ---------- CONTACTS / CTA ---------- */
   .contact { background: var(--soft); }
   .contact-flex { display:grid; grid-template-columns: 1fr 1fr; gap: 56px; align-items:center; }
@@ -599,6 +671,7 @@
       <li><a href="#catalog">Каталог</a></li>
       <li><a href="#steps">Этапы работы</a></li>
       <li><a href="#print">Шелкография</a></li>
+      <li><a href="#faq">Вопросы</a></li>
       <li><a href="#contact">Контакты</a></li>
     </ul>
     <a href="https://wa.me/996700712212?text=%D0%97%D0%B4%D1%80%D0%B0%D0%B2%D1%81%D1%82%D0%B2%D1%83%D0%B9%D1%82%D0%B5!%20%D0%A5%D0%BE%D1%87%D1%83%20%D1%80%D0%B0%D1%81%D1%81%D1%87%D0%B8%D1%82%D0%B0%D1%82%D1%8C%20%D1%81%D1%82%D0%BE%D0%B8%D0%BC%D0%BE%D1%81%D1%82%D1%8C%20%D0%BF%D0%BE%D1%88%D0%B8%D0%B2%D0%B0%20%D0%BE%D0%BF%D1%82%D0%BE%D0%BC." target="_blank" rel="noopener" class="nav-cta">Узнать цену</a>
@@ -1040,6 +1113,46 @@
   </div>
 </section>
 
+<!-- ================= FAQ (AEO / GEO) ================= -->
+<section id="faq">
+  <div class="wrap">
+    <div class="sec-head center">
+      <div class="sec-eyebrow" data-jnn="faq_eyebrow">Вопросы и ответы</div>
+      <h2 data-jnn="faq_title">Частые вопросы оптовых клиентов</h2>
+      <p data-jnn="faq_subtitle">Собрали то, что чаще всего спрашивают бренды и селлеры маркетплейсов. Не нашли ответ — напишите в WhatsApp, ответим в течение рабочего дня.</p>
+    </div>
+    <div class="faq-list" data-jnn-faq>
+      <details class="faq-item" open>
+        <summary><span>Какой минимальный тираж заказа — от 50 шт готовые модели и от 500 шт СТМ?</span></summary>
+        <div class="faq-a">Готовые базовые модели — футболки, худи, зип-худи, лонгсливы, свитшоты, брюки и костюмы — шьём от <b>50 шт</b>. Пошив под собственным брендом (СТМ) с вашими лекалами, бирками, этикетками и упаковкой — от <b>500 шт</b>. Любой цвет и размерная сетка под заказ.</div>
+      </details>
+      <details class="faq-item">
+        <summary><span>Как быстро отшивается образец и запускается партия?</span></summary>
+        <div class="faq-a">Образец-эталон отшиваем за <b>3–5 рабочих дней</b> после согласования лекал и ткани. Серийная партия — <b>10–14 рабочих дней</b> в зависимости от модели, тиража и загрузки цеха. Печать в шелкографии добавляет 2–4 дня.</div>
+      </details>
+      <details class="faq-item">
+        <summary><span>Работаете ли вы по договору и с безналичной оплатой?</span></summary>
+        <div class="faq-a">Да. Договор заключает <b>ОсОО «Айдана Стайл» (ИНН 02001202310372)</b> — предоставляем полный пакет закрывающих документов: договор, счёт, акты, накладные, счёт-фактуру. Оплата безналичная или наличными, есть расчётный счёт для РФ и Казахстана. Для постоянных клиентов возможна поэтапная оплата.</div>
+      </details>
+      <details class="faq-item">
+        <summary><span>Помогаете ли с маркировкой «Честный Знак» и фулфилментом для Wildberries и Ozon?</span></summary>
+        <div class="faq-a">Да. Наносим маркировку <b>«Честный Знак»</b>, упаковываем по стандартам Wildberries и Ozon — индивидуальная упаковка, штрихкоды, маркировка коробов. Отгружаем карго напрямую на склады маркетплейсов в РФ, Беларуси и Казахстане.</div>
+      </details>
+      <details class="faq-item">
+        <summary><span>Какие возможности нанесения принтов — шелкография M&amp;R и стойкость к стиркам?</span></summary>
+        <div class="faq-a">Собственный печатный цех на автоматическом трафаретном станке <b>M&amp;R Sportsman EX</b>: шелкография до <b>12 цветов</b>, водные, пластизолевые и вытравные краски, тиражи до <b>5000 шт в смену</b>. Печать выдерживает более 50 циклов стирки. Также делаем DTF-печать, вышивку и шелкографию по футболкам, худи и свитшотам.</div>
+      </details>
+      <details class="faq-item">
+        <summary><span>Как организована доставка карго в города РФ и СНГ?</span></summary>
+        <div class="faq-a">Отправляем карго-перевозчиками из Бишкека в Москву, Санкт-Петербург, Новосибирск, Екатеринбург, Казань, Алматы, Астану и другие города. Срок доставки — <b>5–12 дней</b>. Работаем со СДЭК и доставкой до склада маркетплейса. Стоимость считаем отдельно по весу партии.</div>
+      </details>
+    </div>
+    <div class="faq-cta">
+      <a class="btn btn-primary" href="https://wa.me/996700712212?text=%D0%97%D0%B4%D1%80%D0%B0%D0%B2%D1%81%D1%82%D0%B2%D1%83%D0%B9%D1%82%D0%B5!%20%D0%A5%D0%BE%D1%87%D1%83%20%D1%80%D0%B0%D1%81%D1%81%D1%87%D0%B8%D1%82%D0%B0%D1%82%D1%8C%20%D1%81%D1%82%D0%BE%D0%B8%D0%BC%D0%BE%D1%81%D1%82%D1%8C%20%D0%BF%D0%BE%D1%88%D0%B8%D0%B2%D0%B0%20%D0%BE%D0%BF%D1%82%D0%BE%D0%BC" target="_blank" rel="noopener">Задать вопрос в WhatsApp</a>
+    </div>
+  </div>
+</section>
+
 <!-- ================= CONTACT ================= -->
 <section class="contact" id="contact">
   <div class="wrap">
@@ -1135,10 +1248,10 @@
 </footer>
 
 <!-- JNN Dynamic Catalog: Template Card Pattern (renders from Directus) -->
-<script src="/assets/js/catalog-dynamic.js?v=5"></script>
+<script src="/assets/js/catalog-dynamic.js?v=6"></script>
 
 <!-- JNN Site Content Sync: phone, WhatsApp, Telegram, email, copyright from Directus -->
-<script src="/assets/js/site-content.js?v=8"></script>
+<script src="/assets/js/site-content.js?v=9"></script>
 
 <!-- JNN Blog: статьи из Directus -->
 <script src="/assets/js/blog.js?v=1"></script>
