@@ -5,6 +5,9 @@
 (function () {
   'use strict';
 
+  // Заглушка-логотип JNN показывается ТОЛЬКО если у товара нет фото.
+  var PLACEHOLDER = '/assets/letuchka_nurlan.jpg';
+
   function getFirstImage(imageValue) {
     if (!imageValue) return '';
     if (Array.isArray(imageValue)) {
@@ -90,11 +93,11 @@
           specs.textContent = p.bullets;
         }
 
-        // Фото (первое из списка)
+        // Фото (первое из списка). Если фото нет — подставляем заглушку-логотип.
         var img = card.querySelector('.cat-img img');
-        var firstImg = getFirstImage(p.image || p.img_1);
-        if (img && firstImg) {
-          img.src = firstImg;
+        if (img) {
+          var firstImg = getFirstImage(p.image || p.img_1);
+          img.src = firstImg || PLACEHOLDER;
           img.alt = p.name || '';
         }
 

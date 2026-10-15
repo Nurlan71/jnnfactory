@@ -50,6 +50,53 @@
     for (var i = 0; i < els.length; i++) els[i].setAttribute('href', v);
   }
 
+  /* ---------- футер и реквизиты общего вида (все страницы) ---------- */
+
+  var SETTINGS = {};
+
+  function esc(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  // Юридическая строка: © + реквизиты + адрес/почта/телефон (значения из CMS).
+  function legalHTML() {
+    var req = safeText(SETTINGS.requisites);
+    var inn = (req.match(/\d{10,}/) || [])[1] || '';
+    var company = (req.split(/[-–·]/)[0] || '').trim() || 'ОсОО «Айдана Стайл»';
+    var parts = [];
+    if (SETTINGS.copyright) parts.push(esc(SETTINGS.copyright));
+    parts.push(esc(company));
+    if (inn) parts.push('ИНН: ' + inn);
+    if (SETTINGS.address) parts.push('Адрес: ' + esc(SETTINGS.address));
+    if (SETTINGS.email) parts.push('Email: ' + esc(SETTINGS.email));
+    if (SETTINGS.phone) parts.push('Тел: ' + esc(SETTINGS.phone));
+    return parts.join('<br/>');
+  }
+
+  // Tilda-страницы: весь юр.блок лежит одной строкой с <br>. Пересобираем его из CMS.
+  function rebuildLegalBlocks() {
+    var els = document.querySelectorAll('footer div, footer p, footer span, footer address');
+    for (var i = 0; i < els.length; i++) {
+      var el = els[i];
+      if (el.querySelector('div, p, ul, li')) continue;
+      var t = el.textContent;
+      if (/©/.test(t) && /(Айдана|ИНН)/.test(t)) el.innerHTML = legalHTML();
+    }
+  }
+
+  // Простые страницы: <footer class="footer"><p>© ...</p><p>реквизиты/контакты</p>
+  function applySimpleFooter(c) {
+    var ps = document.querySelectorAll('footer p');
+    if (!ps.length) return;
+    var req = safeText(c && c.requisites) || safeText(SETTINGS.requisites);
+    var line2 = [req, safeText(SETTINGS.email), safeText(SETTINGS.phone)].filter(Boolean).join(' · ');
+    for (var i = 0; i < ps.length; i++) {
+      var t = ps[i].textContent;
+      if (/©/.test(t) && safeText(SETTINGS.copyright)) ps[i].textContent = safeText(SETTINGS.copyright);
+      else if (/(Айдана|ИНН\s*0|jnnwear)/.test(t) && line2) ps[i].textContent = line2;
+    }
+  }
+
   /* ---------- помощники, сохраняющие вложенную разметку ---------- */
 
   // Обновляет первый текстовый узел контейнера, НЕ удаляя дочерние элементы
@@ -103,6 +150,7 @@
 
   function applySettings(d) {
     if (!d) return;
+    SETTINGS = d;
 
     var p = safeText(d.phone);
     if (p) {
@@ -134,6 +182,14 @@
     setText('.f-bottom span:nth-child(2)', d.legal);
 
     setText('[data-jnn="address"]', d.address);
+    setText('[data-jnn="phone"]', d.phone);
+    setText('[data-jnn="email"]', d.email);
+
+    // Простые footers (на всех страницах): копирайт сразу из настроек.
+    var fps = document.querySelectorAll('footer p');
+    for (var q = 0; q < fps.length; q++) {
+      if (/©/.test(fps[q].textContent) && safeText(d.copyright)) fps[q].textContent = safeText(d.copyright);
+    }
 
     console.log('JNN SiteContent: site_settings применены');
   }
@@ -176,8 +232,10 @@
     }
   }
 
-  // footer_about — описание бренда, слоган и реквизиты в футере
+  // footer_about — описание бренда, слоган и реквизиты в футере (на всех страницах)
   function applyFooterAbout(c) {
+    if (safeText(c.requisites)) SETTINGS.requisites = c.requisites;
+
     var brand = document.querySelector('footer .f-brand') || document.querySelector('.f-brand');
     if (brand) {
       if (c.text) setLeadText(brand, c.text, true);
@@ -188,6 +246,10 @@
       }
     }
     setText('.f-bottom span:nth-child(2)', c.requisites);
+
+    // Общий футер: простые страницы + Tilda-страницы
+    applySimpleFooter(c);
+    rebuildLegalBlocks();
   }
 
   var STRUCTURED = {
