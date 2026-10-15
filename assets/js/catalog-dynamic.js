@@ -8,6 +8,14 @@
   // Заглушка-логотип JNN показывается ТОЛЬКО если у товара нет фото.
   var PLACEHOLDER = '/assets/letuchka_nurlan.jpg';
 
+  // Быстрый заказ в WhatsApp с готовым текстом под конкретный товар.
+  var WA_PHONE = '996700712212';
+  var WA_PREFIX = 'Здравствуйте! Хочу рассчитать стоимость пошива оптом: ';
+
+  function waOrderLink(name) {
+    return 'https://wa.me/' + WA_PHONE + '?text=' + encodeURIComponent(WA_PREFIX + (name || ''));
+  }
+
   function getFirstImage(imageValue) {
     if (!imageValue) return '';
     if (Array.isArray(imageValue)) {
@@ -107,6 +115,13 @@
         links.forEach(function (a) {
           a.href = '/' + slug + '.html';
         });
+
+        // Кнопка быстрого заказа в WhatsApp с названием товара
+        var order = card.querySelector('.cat-order');
+        if (order) {
+          order.href = waOrderLink(p.name);
+          order.setAttribute('aria-label', 'Заказать «' + (p.name || '') + '» в WhatsApp');
+        }
 
         grid.appendChild(card);
       });

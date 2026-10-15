@@ -5,11 +5,311 @@ function t_onFuncLoad(funcName,okFunc,time) {if(typeof window[funcName]==='funct
 document.addEventListener('DOMContentLoaded',t_setvisRecs);}})();</script></link></link></link><style>.tildalabel,.tildalabel-free{display:none!important}</style><script type="application/ld+json">
 {
   "@context": "https://schema.org",
-  "@type": "Organization",
-  "name": "JNN Factory",
-  "url": "https://jnnfactory.online",
-  "logo": "/img/logo.png",
-  "description": "Производитель очков и оборудования для производства"
+  "@graph": [
+    {
+      "@type": "Organization",
+      "@id": "https://jnnfactory.online/#organization",
+      "name": "JNN Factory",
+      "legalName": "ОсОО «Айдана Стайл»",
+      "alternateName": [
+        "ОсОО Айдана Стайл",
+        "Швейная фабрика JNN Factory"
+      ],
+      "taxID": "02001202310372",
+      "url": "https://jnnfactory.online/",
+      "logo": {
+        "@type": "ImageObject",
+        "url": "https://jnnfactory.online/assets/photo.jpg",
+        "width": 256,
+        "height": 256
+      },
+      "image": "https://jnnfactory.online/assets/og-cover.jpg",
+      "description": "Швейное производство полного цикла в Бишкеке: трикотажная одежда оптом для российских брендов, ритейлеров и селлеров маркетплейсов. Готовые модели от 50 шт, пошив под собственным брендом (СТМ) от 500 шт, шелкография, фулфилмент для Wildberries и Ozon. С 2012 года.",
+      "slogan": "Только вперёд!",
+      "foundingDate": "2012",
+      "founder": {
+        "@type": "Person",
+        "name": "Нурлан"
+      },
+      "numberOfEmployees": {
+        "@type": "QuantitativeValue",
+        "value": 40
+      },
+      "knowsAbout": [
+        "швейное производство полного цикла",
+        "пошив трикотажной одежды оптом",
+        "пошив одежды под собственным брендом (СТМ)",
+        "шелкография и печать на одежде (станок M&R Sportsman)",
+        "производство одежды для маркетплейсов Wildberries и Ozon",
+        "фулфилмент для маркетплейсов"
+      ],
+      "address": {
+        "@type": "PostalAddress",
+        "streetAddress": "ул. Васильева, 55",
+        "addressLocality": "Бишкек",
+        "addressRegion": "Чуйская область",
+        "addressCountry": "KG",
+        "postalCode": "720040"
+      },
+      "contactPoint": [
+        {
+          "@type": "ContactPoint",
+          "telephone": "+996-700-712-212",
+          "contactType": "customer service",
+          "areaServed": [
+            "RU",
+            "KG",
+            "KZ",
+            "BY"
+          ],
+          "availableLanguage": [
+            "Russian",
+            "Kyrgyz"
+          ]
+        },
+        {
+          "@type": "ContactPoint",
+          "email": "jnnwear@gmail.com",
+          "contactType": "sales"
+        }
+      ],
+      "sameAs": [
+        "https://www.instagram.com/jnn_factory",
+        "https://t.me/jnnfactory",
+        "https://t.me/JNN_Factory_bot"
+      ]
+    },
+    {
+      "@type": "LocalBusiness",
+      "@id": "https://jnnfactory.online/#localbusiness",
+      "name": "JNN Factory",
+      "legalName": "ОсОО «Айдана Стайл»",
+      "taxID": "02001202310372",
+      "description": "Швейная фабрика полного цикла в Бишкеке: трикотаж оптом, пошив СТМ от 500 шт, готовые модели от 50 шт, собственный печатный цех шелкографии M&R.",
+      "image": "https://jnnfactory.online/assets/og-cover.jpg",
+      "logo": "https://jnnfactory.online/assets/photo.jpg",
+      "telephone": "+996-700-712-212",
+      "email": "jnnwear@gmail.com",
+      "priceRange": "от 280 сом",
+      "currenciesAccepted": "KGS, RUB, KZT",
+      "paymentAccepted": "Наличные, безналичный расчёт, расчётный счёт",
+      "address": {
+        "@type": "PostalAddress",
+        "streetAddress": "ул. Васильева, 55",
+        "addressLocality": "Бишкек",
+        "addressRegion": "Чуйская область",
+        "addressCountry": "KG",
+        "postalCode": "720040"
+      },
+      "geo": {
+        "@type": "GeoCoordinates",
+        "latitude": 42.8746,
+        "longitude": 74.5698
+      },
+      "openingHoursSpecification": [
+        {
+          "@type": "OpeningHoursSpecification",
+          "dayOfWeek": [
+            "Monday",
+            "Tuesday",
+            "Wednesday",
+            "Thursday",
+            "Friday"
+          ],
+          "opens": "09:00",
+          "closes": "18:00"
+        }
+      ],
+      "areaServed": [
+        {
+          "@type": "Country",
+          "name": "Кыргызстан"
+        },
+        {
+          "@type": "Country",
+          "name": "Казахстан"
+        },
+        {
+          "@type": "Country",
+          "name": "Россия"
+        },
+        {
+          "@type": "Country",
+          "name": "Беларусь"
+        }
+      ],
+      "parentOrganization": {
+        "@id": "https://jnnfactory.online/#organization"
+      },
+      "makesOffer": [
+        {
+          "@type": "Offer",
+          "itemOffered": {
+            "@id": "https://jnnfactory.online/#service-wholesale"
+          }
+        },
+        {
+          "@type": "Offer",
+          "itemOffered": {
+            "@id": "https://jnnfactory.online/#service-stm"
+          }
+        },
+        {
+          "@type": "Offer",
+          "itemOffered": {
+            "@id": "https://jnnfactory.online/#service-print"
+          }
+        },
+        {
+          "@type": "Offer",
+          "itemOffered": {
+            "@id": "https://jnnfactory.online/#service-fulfillment"
+          }
+        }
+      ],
+      "aggregateRating": {
+        "@type": "AggregateRating",
+        "ratingValue": "5",
+        "bestRating": "5",
+        "worstRating": "1",
+        "reviewCount": "4",
+        "itemReviewed": {
+          "@id": "https://jnnfactory.online/#organization"
+        }
+      },
+      "review": [
+        {
+          "@type": "Review",
+          "author": {
+            "@type": "Organization",
+            "name": "ООО «Восход Холдинг», Бишкек"
+          },
+          "reviewRating": {
+            "@type": "Rating",
+            "ratingValue": "5",
+            "bestRating": "5"
+          },
+          "reviewBody": "Работаем с JNN Factory с 2024 года. Качество трикотажа стабильное — футболки из плотного хлопка «пенье» не деформируются после стирки. Доставка в Москву через СДЭК — 9 дней."
+        },
+        {
+          "@type": "Review",
+          "author": {
+            "@type": "Person",
+            "name": "Мереке Айбекова, бренд «MerkeStyle», Алматы"
+          },
+          "reviewRating": {
+            "@type": "Rating",
+            "ratingValue": "5",
+            "bestRating": "5"
+          },
+          "reviewBody": "Фабрика шьёт аккуратно, ткани — настоящие турецкие «пенье». Доставили в Алматы за 6 дней."
+        },
+        {
+          "@type": "Review",
+          "author": {
+            "@type": "Organization",
+            "name": "ООО «Айлукхоум», г. Иваново"
+          },
+          "reviewRating": {
+            "@type": "Rating",
+            "ratingValue": "5",
+            "bestRating": "5"
+          },
+          "reviewBody": "Партия выполнена в срок. Качество вельвета с начёсом соответствует заявленному — плотность 330 г/м², швы качественные, цвета совпадают с образцом."
+        },
+        {
+          "@type": "Review",
+          "author": {
+            "@type": "Person",
+            "name": "Малика, «MStyle.kz», Алматы"
+          },
+          "reviewRating": {
+            "@type": "Rating",
+            "ratingValue": "5",
+            "bestRating": "5"
+          },
+          "reviewBody": "Заказываю у JNN уже третий раз. Можно заказать от 50 шт для теста и от 500 шт для основного тиража."
+        }
+      ]
+    },
+    {
+      "@type": "Service",
+      "@id": "https://jnnfactory.online/#service-wholesale",
+      "name": "Пошив трикотажной одежды оптом по готовым моделям",
+      "serviceType": "Пошив одежды оптом",
+      "description": "Базовые модели трикотажа — футболки, худи, лонгсливы, свитшоты, брюки, костюмы — от 50 шт. Любой цвет и размерная сетка под заказ.",
+      "provider": {
+        "@id": "https://jnnfactory.online/#organization"
+      },
+      "areaServed": [
+        {
+          "@type": "Country",
+          "name": "Кыргызстан"
+        },
+        {
+          "@type": "Country",
+          "name": "Казахстан"
+        },
+        {
+          "@type": "Country",
+          "name": "Россия"
+        }
+      ],
+      "offers": {
+        "@type": "AggregateOffer",
+        "priceCurrency": "KGS",
+        "lowPrice": "280",
+        "highPrice": "1750",
+        "offerCount": "12",
+        "availability": "https://schema.org/InStock"
+      }
+    },
+    {
+      "@type": "Service",
+      "@id": "https://jnnfactory.online/#service-stm",
+      "name": "Пошив одежды под собственным брендом (СТМ)",
+      "serviceType": "Производство одежды под частной маркой",
+      "description": "Пошив СТМ от 500 шт: ваши лекала и принты, бирки, этикетки и упаковка под вашим брендом. Помощь с образцами и лекалами.",
+      "provider": {
+        "@id": "https://jnnfactory.online/#organization"
+      },
+      "offers": {
+        "@type": "Offer",
+        "description": "Минимальный тираж 500 шт. Разработка лекал, бирки, этикетки и упаковка под вашим брендом.",
+        "availability": "https://schema.org/InStock"
+      }
+    },
+    {
+      "@type": "Service",
+      "@id": "https://jnnfactory.online/#service-print",
+      "name": "Шелкография и печать на одежде",
+      "serviceType": "Печать и шелкография на трикотаже",
+      "description": "Собственный печатный цех: карусельный станок M&R Sportsman (до 12 цветов), шелкография и печать принтов любой сложности.",
+      "provider": {
+        "@id": "https://jnnfactory.online/#organization"
+      }
+    },
+    {
+      "@type": "Service",
+      "@id": "https://jnnfactory.online/#service-fulfillment",
+      "name": "Фулфилмент для Wildberries и Ozon",
+      "serviceType": "Фулфилмент для маркетплейсов",
+      "description": "Упаковка, маркировка и отгрузка партий на склады Wildberries и Ozon для селлеров и брендов.",
+      "provider": {
+        "@id": "https://jnnfactory.online/#organization"
+      }
+    },
+    {
+      "@type": "WebSite",
+      "@id": "https://jnnfactory.online/#website",
+      "url": "https://jnnfactory.online/",
+      "name": "JNN Factory",
+      "inLanguage": "ru-RU",
+      "publisher": {
+        "@id": "https://jnnfactory.online/#organization"
+      }
+    }
+  ]
 }
 </script></head> <body class="t-body" style="margin:0;"> <!--allrecords--> <div class="t-records" data-hook="blocks-collection-content-node" data-tilda-cookie="no" data-tilda-formskey="04792609b93f05fe65dde57a13349539" data-tilda-lazy="yes" data-tilda-page-alias="women-tshirt-oversize" data-tilda-page-id="72601479" data-tilda-project-country="KG" data-tilda-project-id="13349539" data-tilda-root-zone="one" id="allrecords"> <!--header--> <header class="t-records" data-hook="blocks-collection-content-node" data-tilda-cookie="no" data-tilda-formskey="04792609b93f05fe65dde57a13349539" data-tilda-lazy="yes" data-tilda-page-id="71817637" data-tilda-project-country="KG" data-tilda-project-id="13349539" data-tilda-root-zone="one" id="t-header"> <div class="r t-rec" data-animationappear="off" data-record-type="257" id="rec1142153441" style=" "> <!-- T228 --> <div id="nav1142153441marker"></div> <div class="t228 t228__positionabsolute" data-appearoffset="" data-bgcolor-hex="#000000" data-bgcolor-rgba="rgba(0,0,0,0.50)" data-bgopacity="0.50" data-bgopacity-two="" data-menu="yes" data-menu-items-align="center" data-menushadow="" data-menushadow-css="" data-navmarker="nav1142153441marker" id="nav1142153441" style="background-color: rgba(0,0,0,0.50); "> <div class="t228__maincontainer" style=""> <div class="t228__padding40px"></div> <div class="t228__leftside"> <div class="t228__leftcontainer"> <a class="t228__imgwrapper" href="https://tilda.cc"> <img alt="Company" class="t228__imglogo" imgfield="img" src="/assets/photo.jpg" style="max-height: 80px"/> </a> </div> </div> <div class="t228__centerside"> <nav class="t228__centercontainer"> <ul class="t228__list t-menu__list t228__list_hidden" role="list"> <li class="t228__list_item" style="padding:0 15px 0 0;"> <a class="t-menu__link-item" data-menu-item-number="1" data-menu-submenu-hook="" href="/">
 Главная
