@@ -1,104 +1,114 @@
-// JNN Site Content Sync — мягкое обновление шапки/футера из Directus
-// Fallback: если API недоступен или поля пустые, вёрстка остаётся нетронутой
+// JNN Site Content Sync v3 — обновление шапки/футера/блоков из Directus
+// Источники: /api/items/site_settings и /api/items/pages_content
+// Fallback: при недоступности API статическая вёрстка остаётся нетронутой
 (function () {
   'use strict';
 
-  var API_URL = '/api/items/site_settings?fields=*';
+  var SETTINGS_URL = '/api/items/site_settings?fields=*&limit=1';
+  var PAGES_URL = '/api/items/pages_content?fields=slug,section,content&filter[slug][_eq]=index&limit=50';
 
   function safeText(val) {
     if (val === null || val === undefined) return '';
-    var s = String(val).trim();
-    return s.length > 0 ? s : '';
+    return String(val).trim();
   }
 
-  function updateText(selector, value) {
+  function firstRecord(payload) {
+    if (!payload || !payload.data) return null;
+    if (Array.isArray(payload.data)) return payload.data[0] || null;
+    return payload.data;
+  }
+
+  function setText(selector, value) {
     var v = safeText(value);
     if (!v) return;
     var els = document.querySelectorAll(selector);
-    for (var i = 0; i < els.length; i++) {
-      els[i].textContent = v;
-    }
+    for (var i = 0; i < els.length; i++) els[i].textContent = v;
   }
 
-  function updatePhone(phone) {
-    var p = safeText(phone);
-    if (!p) return;
-    var tels = document.querySelectorAll('a[href^="tel:"]');
-    var cleanPhone = p.replace(/[\s\-()]/g, '');
-    for (var i = 0; i < tels.length; i++) {
-      tels[i].setAttribute('href', 'tel:' + cleanPhone);
-      var txt = tels[i].textContent.trim();
-      if (/[\+]?[0-9][\d\s\-()]{6,}/.test(txt)) {
-        tels[i].textContent = p;
-      }
-    }
+  function setHTML(selector, value) {
+    var v = safeText(value);
+    if (!v) return;
+    var els = document.querySelectorAll(selector);
+    for (var i = 0; i < els.length; i++) els[i].innerHTML = v;
   }
 
-  function applyData(data) {
-    // site_settings — singleton, но API может вернуть массив или объект
-    var d = null;
-    if (data && data.data) {
-      if (Array.isArray(data.data)) {
-        d = data.data[0];
-      } else {
-        d = data.data;
-      }
-    }
+  function setHref(selector, value) {
+    var v = safeText(value);
+    if (!v) return;
+    var els = document.querySelectorAll(selector);
+    for (var i = 0; i < els.length; i++) els[i].setAttribute('href', v);
+  }
+
+  function applySettings(d) {
     if (!d) return;
 
-    // Телефон
-    updatePhone(d.phone);
-
-    // WhatsApp
-    var wa = safeText(d.whatsapp);
-    if (wa) {
-      var waLinks = document.querySelectorAll('a[href*="wa.me"]');
-      for (var i = 0; i < waLinks.length; i++) {
-        waLinks[i].setAttribute('href', wa);
+    // Телефон: все tel:-ссылки + видимый текст
+    var p = safeText(d.phone);
+    if (p) {
+      var clean = p.replace(/[\s\-()]/g, '');
+      var tels = document.querySelectorAll('a[href^="tel:"]');
+      for (var i = 0; i < tels.length; i++) {
+        tels[i].setAttribute('href', 'tel:' + clean);
+        if (/[\+]?[0-9][\d\s\-()]{6,}/.test(tels[i].textContent.trim())) {
+          tels[i].textContent = p;
+        }
       }
     }
 
-    // Telegram
-    var tg = safeText(d.telegram);
-    if (tg) {
-      var tgLinks = document.querySelectorAll('a[href*="t.me/jnnfactory"]:not([href*="bot"])');
-      for (var j = 0; j < tgLinks.length; j++) {
-        tgLinks[j].setAttribute('href', tg);
-      }
-    }
+    // WhatsApp / Telegram / Email
+    setHref('a[href*="wa.me"]', d.whatsapp);
+    setHref('a[href*="t.me/jnnfactory"]:not([href*="bot"])', d.telegram);
 
-    // Email
     var email = safeText(d.email);
     if (email) {
-      var mailLinks = document.querySelectorAll('a[href^="mailto:"]');
-      for (var k = 0; k < mailLinks.length; k++) {
-        mailLinks[k].setAttribute('href', 'mailto:' + email);
-        mailLinks[k].textContent = email;
+      var mails = document.querySelectorAll('a[href^="mailto:"]');
+      for (var k = 0; k < mails.length; k++) {
+        mails[k].setAttribute('href', 'mailto:' + email);
+        mails[k].textContent = email;
       }
     }
 
-    // Footer copyright
-    updateText('.f-bottom span:first-child', d.copyright);
+    // Футер: копирайт и юридическая строка
+    setText('.f-bottom span:first-child', d.copyright);
+    setText('.f-bottom span:nth-child(2)', d.legal);
 
-    // Footer text / brand description
-    var footerText = safeText(d.footer_text);
-    if (footerText) {
-      var brandEl = document.querySelector('.f-brand');
-      if (brandEl) {
-        brandEl.innerHTML = footerText;
-      }
-    }
+    // Описание бренда в футере (HTML допускается)
+    setHTML('.f-brand', d.footer_text);
 
-    console.log('JNN SiteContent: данные применены из Directus');
+    // Адрес
+    setText('[data-jnn="address"]', d.address);
+
+    console.log('JNN SiteContent: site_settings применены');
   }
 
-  fetch(API_URL)
-    .then(function (res) {
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      return res.json();
-    })
-    .then(applyData)
-    .catch(function (err) {
-      console.warn('JNN SiteContent: API недоступен, использую статику (' + err.message + ')');
+  function applyPages(records) {
+    if (!records || !records.length) return;
+    var applied = 0;
+    records.forEach(function (rec) {
+      var content = rec.content;
+      if (typeof content === 'string') {
+        try { content = JSON.parse(content); } catch (e) { return; }
+      }
+      if (!content || typeof content !== 'object') return;
+      Object.keys(content).forEach(function (key) {
+        var el = document.querySelector('[data-jnn="' + key + '"]');
+        if (el && safeText(content[key])) {
+          el.innerHTML = content[key];
+          applied++;
+        }
+      });
     });
+    if (applied) console.log('JNN SiteContent: pages_content применён (' + applied + ' блоков)');
+  }
+
+  // Оба запроса независимы; ошибка одного не ломает другой
+  fetch(SETTINGS_URL)
+    .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+    .then(function (j) { applySettings(firstRecord(j)); })
+    .catch(function (e) { console.warn('JNN SiteContent: site_settings недоступен (' + e.message + ')'); });
+
+  fetch(PAGES_URL)
+    .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+    .then(function (j) { applyPages(j.data || []); })
+    .catch(function (e) { console.warn('JNN SiteContent: pages_content недоступен (' + e.message + ')'); });
 })();
