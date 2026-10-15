@@ -1,3 +1,10 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* Исходник стилей сайта (Tailwind CSS v4).
+   Сборка: npm run css        →  css/src.css  (этот файл подключают страницы)
+
+   Страницы Tilda (/women, /men, /stm, …) стилизуются своим штатным CSS
+   из /assets/tilda-*.min.css — см. _scripts/fix_css.js.
+   Tailwind нужен страницам, свёрстанным утилити-классами:
+   velvet-suit, kostum-dvoyka-kantom, zhenskie-kostyumy.               */
+@import "tailwindcss" source(none);
+@source "../../*.html";
+@source "../../blog/*.html";
