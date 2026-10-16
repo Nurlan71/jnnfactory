@@ -2,8 +2,8 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
         xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
   <url>
-    <loc>https://jnnfactory.online/about</loc>
-    <lastmod>2026-10-16</lastmod>
+    <loc>https://jnnfactory.online/about.html</loc>
+    <lastmod>2026-10-17</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
@@ -19,15 +19,10 @@
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
+
   <url>
-    <loc>https://jnnfactory.online/blog/</loc>
-    <lastmod>2026-10-16</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
-    <loc>https://jnnfactory.online/blog/kak-vybrat-shveynuyu-fabriku-v-kyrgyzstane</loc>
-    <lastmod>2026-10-16</lastmod>
+    <loc>https://jnnfactory.online/blog/kak-vybrat-shveynuyu-fabriku-v-kyrgyzstane.html</loc>
+    <lastmod>2026-10-17</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
@@ -38,8 +33,8 @@
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://jnnfactory.online/blog/pene-ili-futer-chto-vybrat</loc>
-    <lastmod>2026-10-16</lastmod>
+    <loc>https://jnnfactory.online/blog/pene-ili-futer-chto-vybrat.html</loc>
+    <lastmod>2026-10-17</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
@@ -62,20 +57,20 @@
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://jnnfactory.online/brand</loc>
-    <lastmod>2026-10-16</lastmod>
+    <loc>https://jnnfactory.online/brand.html</loc>
+    <lastmod>2026-10-17</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.85</priority>
   </url>
   <url>
-    <loc>https://jnnfactory.online/catalog</loc>
-    <lastmod>2026-10-16</lastmod>
+    <loc>https://jnnfactory.online/catalog.html</loc>
+    <lastmod>2026-10-17</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.95</priority>
   </url>
   <url>
-    <loc>https://jnnfactory.online/conditions</loc>
-    <lastmod>2026-10-16</lastmod>
+    <loc>https://jnnfactory.online/conditions.html</loc>
+    <lastmod>2026-10-17</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.85</priority>
   </url>
@@ -113,8 +108,8 @@
     </image:image>
   </url>
   <url>
-    <loc>https://jnnfactory.online/kontraktnoe-proizvodstvo-odezhdy</loc>
-    <lastmod>2026-10-16</lastmod>
+    <loc>https://jnnfactory.online/kontraktnoe-proizvodstvo-odezhdy.html</loc>
+    <lastmod>2026-10-17</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
@@ -158,8 +153,8 @@
     <priority>0.85</priority>
   </url>
   <url>
-    <loc>https://jnnfactory.online/poshiv-odezhdy-pod-brendom</loc>
-    <lastmod>2026-10-16</lastmod>
+    <loc>https://jnnfactory.online/poshiv-odezhdy-pod-brendom.html</loc>
+    <lastmod>2026-10-17</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
@@ -182,29 +177,24 @@
     <priority>0.85</priority>
   </url>
   <url>
-    <loc>https://jnnfactory.online/reviews</loc>
-    <lastmod>2026-10-16</lastmod>
+    <loc>https://jnnfactory.online/reviews.html</loc>
+    <lastmod>2026-10-17</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://jnnfactory.online/shelkografiya</loc>
-    <lastmod>2026-10-15</lastmod>
+    <loc>https://jnnfactory.online/shelkografiya.html</loc>
+    <lastmod>2026-10-17</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.85</priority>
   </url>
   <url>
-    <loc>https://jnnfactory.online/shveynaya-fabrika-bishkek</loc>
-    <lastmod>2026-10-16</lastmod>
+    <loc>https://jnnfactory.online/shveynaya-fabrika-bishkek.html</loc>
+    <lastmod>2026-10-17</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
-  <url>
-    <loc>https://jnnfactory.online/stm.html</loc>
-    <lastmod>2026-10-16</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.85</priority>
-  </url>
+
   <url>
     <loc>https://jnnfactory.online/sweatshirt-fleece.html</loc>
     <lastmod>2026-10-16</lastmod>
@@ -341,8 +331,8 @@
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://jnnfactory.online/zhenskie-kostyumy</loc>
-    <lastmod>2026-10-16</lastmod>
+    <loc>https://jnnfactory.online/zhenskie-kostyumy.html</loc>
+    <lastmod>2026-10-17</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
