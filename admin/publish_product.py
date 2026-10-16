@@ -1029,9 +1029,8 @@ def status(root: str | None = None) -> dict:
 
 def _ids_to_slugs(raw) -> list[str]:
     ids = []
-    for chunk in re.split(r"[,\s\[\]]+", text_of(raw)):
-        if chunk.strip().isdigit():
-            ids.append(int(chunk))
+    for chunk in re.findall(r"\d+", text_of(raw)):
+        ids.append(int(chunk))
     if not ids:
         return []
     products = fetch_products()
@@ -1052,8 +1051,11 @@ def api_publish(payload: dict) -> dict:
             slugs = [x for x in re.split(r"[,\s]+", slugs) if x]
         return {"ok": True,
                 "published": [publish_slug(s, force=force, dry=dry, refresh_llms=refresh) for s in slugs]}
-    if payload.get("keys") or payload.get("ids"):
-        slugs = _ids_to_slugs(payload.get("keys") or payload.get("ids"))
+    if any(field in payload for field in ("keys", "key", "ids")):
+        # Directus: для items.update приходит keys (массив), для items.create — key;
+        # отсутствующее поле подставляется строкой "undefined" — просто игнорируем.
+        raw = " ".join(text_of(payload.get(field)) for field in ("keys", "key", "ids"))
+        slugs = _ids_to_slugs(raw)
         if slugs:
             return {"ok": True,
                     "published": [publish_slug(s, force=force, dry=dry, refresh_llms=refresh) for s in slugs]}
