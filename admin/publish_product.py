@@ -291,6 +291,31 @@ def content_hash(product: dict) -> str:
     return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:12]
 
 
+def grid_cells_bounds(text: str, grid_start: int) -> tuple[int, int]:
+    """Границы ячеек сетки галереи: (начало ячеек, позиция закрывающего </div>).
+
+    Меняем только ячейки. Если срезать регион до маркера <!--/gallery -->, теряется
+    закрывающий </div> обёртки .t989__gallery-wrapper, и браузер вкладывает
+    все последующие записи (карточку, FAQ) внутрь записи галереи.
+    """
+    inner_start = grid_start + len(GRID_START)
+    depth = 1
+    pos = inner_start
+    while True:
+        next_open = text.find("<div", pos)
+        next_close = text.find("</div>", pos)
+        if next_close < 0:
+            raise PublishError("сетка галереи t989 не закрыта")
+        if 0 <= next_open < next_close:
+            depth += 1
+            pos = next_open + 4
+            continue
+        depth -= 1
+        if depth == 0:
+            return inner_start, next_close
+        pos = next_close + 6
+
+
 def marker_of(text: str) -> dict:
     """Разбирает маркер <!-- jnn:publish slug=... hash=... --> из начала файла."""
     match = re.search(re.escape(MARKER_PREFIX) + r"([^>]*)-->", text or "")
@@ -484,9 +509,9 @@ def render(template: str, values: dict, product: dict, products: list[dict]) -> 
     out = swap(out, "t989_init('1172546201')", "t989_init('" + values["ids"]["gallery"] + "')",
                slug + ":gallery-init")
     start = out.find(GRID_START)
-    end = out.find(GRID_END, start if start >= 0 else 0)
-    if start < 0 or end < 0:
+    if start < 0:
         raise PublishError(f"[{slug}] не найдена сетка галереи t989")
+    inner_start, inner_end = grid_cells_bounds(out, start)
     cells = ""
     for index, photo in enumerate(values["photos"]):
         alt = (f"{values['h1']} оптом от производителя JNN Factory в Бишкеке" if index == 0
@@ -494,7 +519,7 @@ def render(template: str, values: dict, product: dict, products: list[dict]) -> 
         cells += ('<div style="padding:4px;"><img src="' + photo + '" loading="lazy" '
                   'style="width:100%;height:auto;border-radius:6px;display:block;" alt="' +
                   escape(alt) + '"></div>')
-    out = out[:start] + GRID_START + cells + "</div> " + out[end:]
+    out = out[:inner_start] + cells + out[inner_end:]
 
     out = swap(out, 'data-record-type="180" id="rec1172548121"',
                'data-record-type="180" id="rec' + values["ids"]["product"] + '"', slug + ":product-id")
