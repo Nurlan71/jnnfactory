@@ -4,3 +4,15 @@
 2. ЗАПРЕЩЕНО полностью перезаписывать index.html.
 3. Разрешены только точечные правки текстовых блоков или подключение внешних скриптов.
 4. Перед любой модификацией обязательно создавай резервную копию в /var/www/jnnfactory/backups/.
+
+### Публикация товаров из Directus (admin/publish_product.py)
+Товар добавляется в Directus (коллекция `products`) — страница `/<slug>.html`, `sitemap.xml` и `llms.txt` обновляются автоматически.
+
+- Модуль: `admin/publish_product.py` (Python 3, только стандартная библиотека, те же проверки, что в `_scripts/build_product_pages.js`).
+- Эталон вёрстки: `women-tshirt-letuchka.html` копируется целиком, замены — только точными подстроками; если якорь не найден ровно один раз, публикация падает и ничего не пишет.
+- Страницы, собранные пайплайном, помечены `<!-- jnn:publish slug=... hash=... -->`. Файлы без маркера (ручные) не перезаписываются: нужен `--force`.
+- Черновик (`show_in_catalog = false`) публикуется с `meta robots "noindex, follow"` и без записей в sitemap/llms.
+- Существующие строки `llms.txt` / `llms-full.txt` не переписываются: новые модели дописываются, прежние остаются как есть (`--refresh-llms` перезапишет данными из Directus).
+- Ручной запуск: `venv/bin/python -m admin.publish_product --slug <slug> | --sync | --all-missing | --unpublish <slug> | --list`.
+- API админки: `POST /gallery-api/publish` (заголовок `x-gallery-key`), `GET /gallery-api/publish/status`, `GET /gallery-api/publish/log`.
+- Автоматика на VPS: флоу Directus `publish_product` (события `items.create`/`items.update` → вебхук на `/gallery-api/publish`) и systemd-таймер `jnnfactory-publish.timer` (сверка с Directus каждые 5 минут).

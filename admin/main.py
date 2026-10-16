@@ -318,3 +318,46 @@ async def gallery_page():
     if not os.path.exists(GALLERY_HTML):
         raise HTTPException(status_code=404, detail="gallery.html не найден")
     return FileResponse(GALLERY_HTML)
+
+
+# ---------------------------------------------------------------------------
+# Публикация товаров: Directus -> страница + sitemap.xml + llms.txt
+# Тот же ключ, что у галереи (JNN_GALLERY_KEY или admin/.gallery_key).
+# Вебхук Directus дергает POST /gallery-api/publish (nginx проксирует префикс).
+# ---------------------------------------------------------------------------
+import admin.publish_product as _publish  # noqa: E402
+
+
+@app.get("/gallery-api/publish/status")
+def publish_status():
+    try:
+        return _publish.status()
+    except _publish.PublishError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+
+@app.get("/gallery-api/publish/log")
+def publish_log(limit: int = 20):
+    return {"ok": True, "log": _publish.read_log(limit)}
+
+
+@app.post("/gallery-api/publish")
+def publish_post(payload: dict = Body(...), x_gallery_key: str = Header(default="")):
+    _check_key(x_gallery_key)
+    try:
+        return _publish.api_publish(payload)
+    except _publish.PublishError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.post("/gallery-api/unpublish")
+def unpublish_post(payload: dict = Body(...), x_gallery_key: str = Header(default="")):
+    _check_key(x_gallery_key)
+    try:
+        return _publish.unpublish(
+            str(payload.get("slug") or "").strip(),
+            force=bool(payload.get("force")),
+            dry=bool(payload.get("dry")),
+        )
+    except _publish.PublishError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
