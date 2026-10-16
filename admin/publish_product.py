@@ -527,7 +527,12 @@ def render(template: str, values: dict, product: dict, products: list[dict]) -> 
 
     marker = (f"{MARKER_PREFIX} slug={slug} hash={content_hash(product)} generated={today()} "
               f"v={VERSION} -->")
-    out = swap(out, "</head>", marker + "</head>", slug + ":marker")
+    # Маркер ставим в самое начало файла: голова Tilda-страницы ~15 КБ, и читать
+    # её целиком ради проверки «наша ли страница» не нужно.
+    if out.count("<!DOCTYPE html>") == 1:
+        out = out.replace("<!DOCTYPE html>", "<!DOCTYPE html>" + marker, 1)
+    else:
+        out = swap(out, "</head>", marker + "</head>", slug + ":marker")
 
     check_page(out, values, template)
     return out
