@@ -1,6 +1,6 @@
-import json, os, re, shutil, uuid
+import datetime, json, os, re, shutil, uuid
 from typing import List, Optional
-from fastapi import FastAPI, UploadFile, File, Header, HTTPException, Body
+from fastapi import FastAPI, UploadFile, File, Header, HTTPException, Body, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -342,8 +342,26 @@ def publish_log(limit: int = 20):
 
 
 @app.post("/gallery-api/publish")
-def publish_post(payload: dict = Body(...), x_gallery_key: str = Header(default="")):
+async def publish_post(request: Request, x_gallery_key: str = Header(default="")):
     _check_key(x_gallery_key)
+    # Тело принимаем «как есть»: вебхук Directus может прислать JSON-строку внутри
+    # JSON или нестандартный Content-Type — тогда разбираем вручную.
+    raw = (await request.body()).decode("utf-8", "replace").strip()
+    payload = None
+    if raw:
+        try:
+            payload = json.loads(raw)
+        except ValueError:
+            payload = None
+        if isinstance(payload, str):
+            try:
+                payload = json.loads(payload)
+            except ValueError:
+                payload = None
+    if not isinstance(payload, dict):
+        _publish.log_event({"ts": datetime.datetime.now().isoformat(timespec="seconds"),
+                            "action": "webhook-parse", "raw": raw[:400]})
+        payload = {}
     try:
         return _publish.api_publish(payload)
     except _publish.PublishError as exc:
