@@ -403,8 +403,9 @@
   /* ---------- HERO ---------- */
   header.hero { position:relative; min-height:100vh; display:flex; align-items:center; padding:120px 0 80px; overflow:hidden; background: #141414; }
   .hero-bg { position:absolute; inset:0; }
-  .hero-bg img { width:100%; height:100%; object-fit:cover; opacity:0.35; }
-  .hero-bg::after { content:""; position:absolute; inset:0; background: linear-gradient(100deg, rgba(20,20,20,0.92) 0%, rgba(20,20,20,0.65) 55%, rgba(20,20,20,0.35) 100%); }
+  .hero-bg img { width:100%; height:100%; object-fit:cover; opacity:0.55; }
+  /* Затемняющий оверлей поверх фонового видео: белый и оранжевый текст, кнопки и бейджи читаются контрастно */
+  .hero-bg::after { content:""; position:absolute; inset:0; z-index:2; background: linear-gradient(100deg, rgba(20,20,20,0.92) 0%, rgba(20,20,20,0.74) 55%, rgba(20,20,20,0.58) 100%); }
   .hero-content { position:relative; z-index:2; max-width:680px; }
   .hero-eyebrow { display:inline-block; color: var(--accent); font-size:13px; font-weight:700; letter-spacing:0.14em; text-transform:uppercase; margin-bottom:20px; }
   .hero h1 { color:#fff; font-size: clamp(34px, 5.4vw, 60px); line-height:1.08; letter-spacing:-0.03em; font-weight:800; margin-bottom:22px; }
@@ -428,22 +429,18 @@
   .hero-meta div { color: rgba(255,255,255,0.75); font-size:13px; }
   .hero-meta b { display:block; color:#fff; font-size:17px; }
 
-  /* ---------- HERO: вертикальное видео 9:16 ---------- */
-  .hero-inner { position:relative; z-index:2; width:100%; display:grid; grid-template-columns: minmax(0,1fr) min(320px, 34vw); gap: clamp(26px, 4vw, 64px); align-items:center; }
-  .hero-video { justify-self:end; width:100%; }
-  .hero-video-facade { position:relative; display:block; width:100%; aspect-ratio: 9 / 16; padding:0; margin:0; border:1px solid rgba(255,255,255,0.16); border-radius:22px; overflow:hidden; background:#0d0d0d url('/assets/260A1229.jpg') center/cover no-repeat; cursor:pointer; box-shadow: 0 26px 60px rgba(0,0,0,0.45); }
-  .hero-video-facade img { display:block; width:100%; height:100%; object-fit:cover; }
-  .hero-video-facade::after { content:""; position:absolute; inset:0; background: linear-gradient(180deg, rgba(0,0,0,0.02) 45%, rgba(0,0,0,0.62) 100%); }
-  .hero-video-ring { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); width:66px; height:66px; border-radius:50%; background:rgba(255,255,255,0.94); color:#141414; display:flex; align-items:center; justify-content:center; padding-left:4px; transition: transform .2s, background .2s; }
-  .hero-video-facade:hover .hero-video-ring { transform:translate(-50%,-50%) scale(1.08); background:#fff; }
-  .hero-video-caption { position:absolute; z-index:2; left:16px; right:16px; bottom:14px; text-align:left; color:#fff; font-size:13px; font-weight:600; line-height:1.35; }
-  .hero-video iframe, .hero-video video { display:block; width:100%; aspect-ratio: 9 / 16; border:0; border-radius:22px; background:#000; }
-  @media (max-width: 980px) {
-    .hero-inner { grid-template-columns: 1fr; gap:32px; }
-    .hero-video { justify-self:center; width: min(250px, 62vw); }
-    .hero-video-caption { font-size:12px; }
-  }
-  @media (max-width: 560px) { .hero-video { width: min(212px, 56vw); } .hero-video-ring { width:56px; height:56px; } }
+  /* ---------- HERO: фоновое видео на весь экран ---------- */
+  /* Как в оригинальной Тильде: ролик играет фоном за текстом (автоплей, без звука, в цикле),
+     сверху затемняющий оверлей .hero-bg::after, контент лежит поверх видео. */
+  .hero-inner { position:relative; z-index:3; width:100%; }
+  .hero-video-bg { position:absolute; inset:0; z-index:1; overflow:hidden; background:#0d0d0d; opacity:0; transition: opacity .7s ease; pointer-events:none; }
+  .hero-video-bg.is-ready { opacity:1; }
+  /* Геометрия «cover» для 16:9-плеера YouTube: видео закрывает блок целиком на любом экране */
+  .hero-video-bg .jnn-video-player { position:absolute; top:50%; left:50%; width:100vw; height:56.25vw; min-height:100%; min-width:177.77vh; transform:translate(-50%,-50%); }
+  .hero-video-bg iframe { display:block; width:100%; height:100%; border:0; }
+  /* Мобильные и режим экономии движения: постер вместо видео - без веса YouTube и без сдвига верстки */
+  @media (max-width: 767px) { .hero-video-bg { display:none !important; } }
+  @media (prefers-reduced-motion: reduce) { .hero-video-bg { display:none !important; } }
 
   /* ---------- SECTION BASE ---------- */
   section { padding: 96px 0; }
@@ -658,7 +655,13 @@
   
     
     
-<div class="hero-bg"><img src="/assets/260A1229.jpg" alt="Производство JNN Factory"></div>
+<div class="hero-bg">
+  <img src="/assets/260A1229.jpg" alt="Производство JNN Factory: швейный цех в Бишкеке">
+  <!-- Фоновое видео первого экрана (как в оригинальной Тильде): автоплей, без звука, в цикле.
+       Скрипт ниже подключает YouTube только на экранах от 768px, на мобильных остаётся постер.
+       Плеер декоративный: без фокуса и кликов, поверх него - затемняющий оверлей. -->
+  <div class="hero-video-bg" id="hero-video-bg" data-video-id="PLC6N5Sa2pE" aria-hidden="true"></div>
+</div>
   <div class="wrap hero-inner">
     <div class="hero-content">
     <span class="hero-eyebrow" data-jnn="hero_eyebrow">С 2012 года · Бишкек · Кыргызстан</span>
@@ -684,20 +687,6 @@
     </div>
     </div>
 
-    <!-- Видео о производстве: вертикальный плеер 9:16, YouTube Shorts.
-         До клика грузится только превью-картинка, iframe подключается по нажатию. -->
-    <div class="hero-video">
-      <button type="button" class="hero-video-facade" id="hero-video-facade" data-video-id="PLC6N5Sa2pE"
-              aria-label="Смотреть видео о производстве JNN Factory">
-        <img src="https://i.ytimg.com/vi/PLC6N5Sa2pE/oar2.jpg"
-             onerror="this.onerror=function(){this.src='/assets/260A1229.jpg';};this.src='https://i.ytimg.com/vi/PLC6N5Sa2pE/hqdefault.jpg';"
-             alt="Производство JNN Factory — превью видео" loading="lazy">
-        <span class="hero-video-ring" aria-hidden="true">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M8 5.2v13.6L19 12z"/></svg>
-        </span>
-        <span class="hero-video-caption">Как работает фабрика: цех, ткани, контроль качества</span>
-      </button>
-    </div>
   </div>
 </header>
 
@@ -1441,30 +1430,53 @@ fetch('data:application/json,{}')/* старый /api/content отключён: 
 </script>
 
 
-<!-- JNN Hero Video: вертикальный плеер 9:16 (превью -> iframe по клику) -->
+<!-- JNN Hero Background Video: фоновое видео первого экрана (YouTube: autoplay, mute, loop) -->
 <script>
 (function () {
-  var facade = document.getElementById('hero-video-facade');
-  if (!facade) return;
+  var box = document.getElementById('hero-video-bg');
+  if (!box) return;
+  var id = box.getAttribute('data-video-id');
+  if (!id) return;
 
-  function play() {
-    var id = facade.getAttribute('data-video-id');
-    if (!id) return;
-    var box = facade.parentNode;
+  var wide = window.matchMedia('(min-width: 768px)');
+  var still = window.matchMedia('(prefers-reduced-motion: reduce)');
+  var mounted = false;
+
+  function mount() {
+    if (mounted) return;
+    mounted = true;
+    var holder = document.createElement('div');
+    holder.className = 'jnn-video-player';
     var frame = document.createElement('iframe');
     frame.src = 'https://www.youtube.com/embed/' + id +
-      '?autoplay=1&rel=0&playsinline=1&modestbranding=1';
-    frame.title = 'JNN Factory — видео о производстве';
-    frame.setAttribute('allow', 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share');
-    frame.setAttribute('allowfullscreen', '');
-    frame.setAttribute('loading', 'eager');
-    box.innerHTML = '';
-    box.appendChild(frame);
+      '?autoplay=1&mute=1&controls=0&loop=1&playlist=' + id +
+      '&playsinline=1&rel=0&showinfo=0&modestbranding=1&iv_load_policy=3&disablekb=1&fs=0';
+    frame.title = 'JNN Factory: видео о производстве (фон)';
+    frame.setAttribute('allow', 'autoplay; encrypted-media');
+    frame.setAttribute('tabindex', '-1');
+    frame.setAttribute('aria-hidden', 'true');
+    frame.addEventListener('load', function () { box.classList.add('is-ready'); });
+    holder.appendChild(frame);
+    box.appendChild(holder);
   }
 
-  facade.addEventListener('click', play);
+  function unmount() {
+    if (!mounted) return;
+    mounted = false;
+    box.innerHTML = '';
+    box.classList.remove('is-ready');
+  }
+
+  function sync() {
+    if (wide.matches && !still.matches) mount(); else unmount();
+  }
+
+  sync();
+  var on = function (mq, fn) { mq.addEventListener ? mq.addEventListener('change', fn) : mq.addListener(fn); };
+  on(wide, sync);
+  on(still, sync);
 })();
-</script>
+</script></script>
 </body>
 
 
