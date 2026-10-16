@@ -548,6 +548,11 @@
   /* ---------- CONTACTS / CTA ---------- */
   .contact { background: var(--soft); }
   .contact-flex { display:grid; grid-template-columns: 1fr 1fr; gap: 56px; align-items:center; }
+  .map-block { margin-top:52px; height:420px; border-radius:16px; overflow:hidden; background:#e9e9e9; border:1px solid var(--line); }
+  .map-block iframe { display:block; width:100%; height:100%; border:0; }
+  .map-note { margin-top:12px; font-size:13px; color:var(--gray); }
+  .map-note a { color:var(--accent); font-weight:600; }
+  @media (max-width: 640px) { .map-block { height:320px; margin-top:36px; } }
   .contact-info h2 { font-size: clamp(28px, 3.4vw, 40px); letter-spacing:-0.025em; font-weight:800; line-height:1.12; margin-bottom: 18px; }
   .contact-info > p { color: var(--gray); margin-bottom: 30px; max-width: 440px; }
   .c-list { list-style:none; display:grid; gap: 16px; }
@@ -1204,7 +1209,7 @@
           </li>
           <li>
             <div class="ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 21s7-5.6 7-11a7 7 0 1 0-14 0c0 5.4 7 11 7 11z"/><circle cx="12" cy="10" r="2.6"/></svg></div>
-            <div><b>Адрес производства</b><a href="https://maps.google.com/?q=Бишкек+Васильева+55" target="_blank" data-jnn="address">Кыргызстан, г. Бишкек, ул. Васильева, 55</a></div>
+            <div><b>Адрес производства</b><a href="https://yandex.ru/maps/?text=%D0%91%D0%B8%D1%88%D0%BA%D0%B5%D0%BA%2C%20%D0%B2%D0%B0%D1%81%D0%B8%D0%BB%D1%8C%D0%B5%D0%B2%D0%B0%2055" target="_blank" rel="noopener" data-jnn="address">Кыргызстан, г. Бишкек, ул. Васильева, 55</a></div>
           </li>
           <li>
             <div class="ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="8.6" r="3.5"/><path d="M5 20c1.6-3.2 4-4.8 7-4.8s5.4 1.6 7 4.8"/></svg></div>
@@ -1232,6 +1237,18 @@
         </form>
         <div class="form-note">Нажимая кнопку, вы соглашаетесь с <a href="/privacy-policy.html" style="text-decoration:underline;">политикой конфиденциальности</a></div>
       </div>
+    </div>
+
+    <!-- Яндекс Карта: адрес производства.
+         Виджет Яндекс Карт, ленивая загрузка - не тормозит первый экран. -->
+    <div class="map-block">
+      <iframe src="https://yandex.ru/map-widget/v1/?ll=74.5951%2C42.8578&amp;z=15&amp;mode=search&amp;text=%D0%B2%D0%B0%D1%81%D0%B8%D0%BB%D1%8C%D0%B5%D0%B2%D0%B0%2055%20%D0%91%D0%B8%D1%88%D0%BA%D0%B5%D0%BA"
+              width="100%" height="100%" frameborder="0" loading="lazy"
+              title="JNN Factory на карте: ул. Васильева, 55, Бишкек"
+              style="border:0;"></iframe>
+    </div>
+    <div class="map-note">Адрес производства: ул. Васильева, 55, Бишкек.
+      <a href="https://yandex.ru/maps/?text=%D0%91%D0%B8%D1%88%D0%BA%D0%B5%D0%BA%2C%20%D0%B2%D0%B0%D1%81%D0%B8%D0%BB%D1%8C%D0%B5%D0%B2%D0%B0%2055" target="_blank" rel="noopener">Открыть в Яндекс Картах</a>
     </div>
   </div>
 </section>
