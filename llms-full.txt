@@ -59,8 +59,8 @@
 | 2 | [Футболка оверсайз](https://jnnfactory.online/women-tshirt-oversize.html) | JNN-W-TS-002 | дабл фейс «пенье компакт», 70% хлопок / 28% полиэстер / 2% эластан | 260 г/м² | S, M, L | от 330 сом |
 | 3 | [Худи женское](https://jnnfactory.online/women-hoodies.html) | JNN-W-HD-001 | футер 3-х нитка (петля) «пенье», 80% хлопок / 20% полиэстер | 340 г/м² | S – XXL | от 780 сом |
 | 4 | [Брюки футер](https://jnnfactory.online/women-pants.html) | JNN-W-PN-001 | футер 3-х нитка (петля) «пенье», 80% хлопок / 20% полиэстер | 340 г/м² | S – XXL | от 800 сом |
-| 5 | [Лонгслив классический (мужской)](https://jnnfactory.online/men-longsleeve.html) | JNN-M-LS-001 | кулирная гладь «пенье», 92% хлопок / 8% эластан | 190 г/м² | S – XXL | от 380 сом |
-| 6 | [Лонгслив классический (женский)](https://jnnfactory.online/women-longsleeve-classic.html) | JNN-W-LS-001 | кулирная гладь «пенье», 92% хлопок / 8% эластан | 190 г/м² | 42 – 50 | от 350 сом |
+| 5 | [Лонгслив мужской классический](https://jnnfactory.online/men-longsleeve.html) | JNN-M-LS-001 | кулирная гладь «пенье», 92% хлопок / 8% эластан | 190 г/м² | S – XXL | от 380 сом |
+| 6 | [Лонгслив женский классический](https://jnnfactory.online/women-longsleeve-classic.html) | JNN-W-LS-001 | кулирная гладь «пенье», 92% хлопок / 8% эластан | 190 г/м² | 42 – 50 | от 350 сом |
 | 7 | [Лонгслив с завязками](https://jnnfactory.online/women-longsleeve-zavyazki.html) | JNN-W-LS-002 | кулирная гладь «пенье», 92% хлопок / 8% эластан | 190 г/м² | 42 – 50 | от 380 сом |
 | 8 | [Зип худи классическое](https://jnnfactory.online/zip-hoodie-classic.html) | JNN-U-ZH-001 | футер 3-х нитка (петля) «пенье», 80% хлопок / 20% полиэстер | 340 г/м² | S – XXL | от 800 сом |
 | 9 | [Зип худи «Варенка»](https://jnnfactory.online/zip-hoodie-varenka.html) | JNN-U-ZH-002 | футер с эффектом «варенка», 75% хлопок / 20% полиэстер / 5% эластан | 240 г/м² | S – XXL | от 850 сом |

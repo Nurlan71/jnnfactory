@@ -1,4 +1,4 @@
-// JNN Dynamic Catalog v4 — Template Card Pattern (Vanilla JS)
+// JNN Dynamic Catalog v5 — Template Card Pattern (Vanilla JS)
 // Рендерит каталог из Directus API, клонируя первую карточку как шаблон.
 // Главное фото берётся из M2M-галереи (первое фото в админке = главное),
 // резерв — поле image, затем первое из gallery. Плюс строка минимальной партии.
@@ -100,9 +100,12 @@
         wrapper.innerHTML = templateHTML;
         var card = wrapper.firstElementChild;
 
-        // Название
+        // Название. В статичной вёрстке оно уже обёрнуто в ссылку на страницу товара:
+        // сохраняем ссылку, меняем только текст.
         var h3 = card.querySelector('h3');
-        if (h3) h3.textContent = p.name || '';
+        var nameLink = h3 ? h3.querySelector('a') : null;
+        if (nameLink) nameLink.textContent = p.name || '';
+        else if (h3) h3.textContent = p.name || '';
 
         // Цена
         var price = card.querySelector('.price');
@@ -156,12 +159,22 @@
           img.alt = p.name || '';
         }
 
-        // Ссылка на детальную страницу
+        // Кликабельны: фото, название (H3) и кнопка «Подробнее»
         var slug = p.slug || slugify(p.name);
-        var links = card.querySelectorAll('.cat-img, .cat-link');
+        var url = '/' + slug + '.html';
+        var links = card.querySelectorAll('.cat-img, .cat-link, .cat-name-link');
         links.forEach(function (a) {
-          a.href = '/' + slug + '.html';
+          a.href = url;
         });
+        // Если название ещё не ссылка (шаблон из старой разметки) — оборачиваем в ссылку
+        if (h3 && !h3.querySelector('a')) {
+          var a2 = document.createElement('a');
+          a2.className = 'cat-name-link';
+          a2.href = url;
+          a2.textContent = p.name || '';
+          h3.textContent = '';
+          h3.appendChild(a2);
+        }
 
         // Кнопка быстрого заказа в WhatsApp с названием товара
         var order = card.querySelector('.cat-order');
