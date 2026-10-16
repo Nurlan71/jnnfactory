@@ -1,12 +1,27 @@
-// JNN Dynamic Catalog — Template Card Pattern (Vanilla JS)
+// JNN Dynamic Catalog v3 — Template Card Pattern (Vanilla JS)
 // Рендерит каталог из Directus API, клонируя первую карточку как шаблон.
+// Главное фото берётся из M2M-галереи (первое фото в админке = главное),
+// резерв — поле image, затем первое из gallery. Плюс строка минимальной партии.
 // При недоступности API оставляет статическую разметку нетронутой.
 
 (function () {
   'use strict';
 
-  // Заглушка-логотип JNN показывается ТОЛЬКО если у товара нет фото.
-  var PLACEHOLDER = '/assets/letuchka_nurlan.jpg';
+  // Заглушка (иконка-футболка) показывается ТОЛЬКО если у товара нет фото.
+  var PLACEHOLDER = '/assets/favicon-tshirt.png';
+
+  // Первое фото M2M-галереи товара (порядок задаётся в админке перетаскиванием).
+  function firstFileUrl(files) {
+    if (!Array.isArray(files) || !files.length) return '';
+    var rows = files.slice().sort(function (a, b) {
+      return ((a && a.sort) || 0) - ((b && b.sort) || 0);
+    });
+    for (var i = 0; i < rows.length; i++) {
+      var id = rows[i] && (rows[i].directus_files_id || (typeof rows[i] === 'string' ? rows[i] : ''));
+      if (id) return '/assets/' + id;
+    }
+    return '';
+  }
 
   // Быстрый заказ в WhatsApp с готовым текстом под конкретный товар.
   var WA_PHONE = '996700712212';
@@ -57,7 +72,8 @@
     if (!templateCard) return;
 
     try {
-      var resp = await fetch('https://admin.jnnfactory.online/items/products');
+      var resp = await fetch('https://admin.jnnfactory.online/items/products'
+        + '?fields=*,gallery_files.directus_files_id,gallery_files.sort');
       if (!resp.ok) throw new Error('API ' + resp.status);
       var json = await resp.json();
       var products = json.data || [];
@@ -113,14 +129,20 @@
               : '<div>Состав: <b>' + esc(cd) + '</b></div>';
           }
           if (p.sizes) rows += '<div>Размеры: <b>' + esc(p.sizes) + '</b></div>';
+          if (p.min_order) {
+            rows += '<div style="margin-top:8px;padding-top:8px;border-top:1px dashed var(--line);">'
+              + esc(p.min_order) + '</div>';
+          }
           if (rows) specs.innerHTML = rows;
           else if (p.bullets) specs.textContent = p.bullets;
         }
 
-        // Фото (первое из списка). Если фото нет — подставляем заглушку-логотип.
+        // Фото (первое из галереи товара). Если фото нет — подставляем заглушку-логотип.
         var img = card.querySelector('.cat-img img');
         if (img) {
-          var firstImg = getFirstImage(p.image || p.img_1);
+          var firstImg = firstFileUrl(p.gallery_files);
+          if (!firstImg) firstImg = getFirstImage(p.image || p.img_1);
+          if (!firstImg) firstImg = getFirstImage(p.gallery);
           img.src = firstImg || PLACEHOLDER;
           img.alt = p.name || '';
         }

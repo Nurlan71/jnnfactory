@@ -19,7 +19,7 @@
   "catalog": [
     {"name": "Мужские футболки", "description": "Базовые футболки из хлопка", "price": "850 KGS", "photo": "/assets/1.jpg"},
     {"name": "Женские худи", "description": "Оверсайз худи с капюшоном", "price": "1450 KGS", "photo": "/assets/hoodie-zip.png"},
-    {"name": "Костюм двойка", "description": "Классический костюм с кантом", "price": "3200 KGS", "photo": "/assets/260A1229.jpg"},
+    {"name": "Костюм двойка", "description": "Классический костюм с кантом", "price": "3200 KGS", "photo": "/assets/kostum-dvoyka-kantom.jpg"},
     {"name": "Лонгслив мужской", "description": "Длинный рукав, хлопок", "price": "950 KGS", "photo": "/assets/5.jpg"},
     {"name": "Женские футболки", "description": "Классические женские футболки", "price": "780 KGS", "photo": "/assets/img_11be4312ff81.jpg"}
   ],
@@ -27,7 +27,7 @@
     "/assets/og-cover.jpg",
     "/assets/1.jpg",
     "/assets/hoodie-zip.png",
-    "/assets/260A1229.jpg",
+    "/assets/kostum-dvoyka-kantom.jpg",
     "/assets/5.jpg",
     "/assets/img_11be4312ff81.jpg"
   ]

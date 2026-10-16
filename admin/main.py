@@ -129,7 +129,8 @@ async def update_catalog(payload: dict):
 # Ключ доступа: переменная окружения JNN_GALLERY_KEY или файл admin/.gallery_key
 # ---------------------------------------------------------------------------
 GALLERY_KEY_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".gallery_key")
-GALLERY_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".avif", ".gif", ".svg"}
+GALLERY_EXTS = {".jpg", ".jpeg", ".jfif", ".png", ".webp", ".avif", ".gif", ".svg"}
+GALLERY_MAX_FILE = 50 * 1024 * 1024  # 50 МБ на файл
 GALLERY_HTML = os.path.join(os.path.dirname(ASSETS_DIR), "gallery.html")
 
 
@@ -202,20 +203,95 @@ async def gallery_upload(files: List[UploadFile] = File(...), x_gallery_key: str
         name = _safe_name(f.filename)
         ext = os.path.splitext(name)[1].lower()
         if not name or ext not in GALLERY_EXTS:
-            errors.append({"name": f.filename, "reason": "недопустимый формат или имя"})
+            errors.append({"name": f.filename, "reason": "формат не поддерживается (нужен jpg, png, webp, avif, gif, svg)"})
             continue
         target = os.path.join(ASSETS_DIR, name)
         if os.path.exists(target):
-            skipped.append({"name": name, "reason": "файл уже существует"})
+            skipped.append({"name": name, "reason": "файл с таким именем уже есть"})
             continue
         try:
             content = await f.read()
+        except Exception as e:
+            errors.append({"name": name, "reason": "не удалось прочитать файл: " + str(e)})
+            continue
+        if not content:
+            errors.append({"name": name, "reason": "пустой файл"})
+            continue
+        if len(content) > GALLERY_MAX_FILE:
+            errors.append({
+                "name": name,
+                "reason": "файл больше 50 МБ (%.1f МБ)" % (len(content) / 1048576.0),
+            })
+            continue
+        try:
             with open(target, "wb") as buf:
                 buf.write(content)
             uploaded.append({"name": name, "url": "/assets/" + name, "size": len(content)})
         except Exception as e:
             errors.append({"name": name, "reason": str(e)})
     return {"uploaded": uploaded, "skipped": skipped, "errors": errors}
+
+
+@app.delete("/gallery-api/delete")
+@app.post("/gallery-api/delete")
+async def gallery_delete(file: str = "", x_gallery_key: str = Header(default="")):
+    _check_key(x_gallery_key)
+    name = _safe_name(file)
+    if not name:
+        raise HTTPException(status_code=400, detail="Не указано имя файла")
+    target = os.path.join(ASSETS_DIR, name)
+    base = os.path.realpath(ASSETS_DIR)
+    real = os.path.realpath(target)
+    if not real.startswith(base + os.sep):
+        raise HTTPException(status_code=400, detail="Недопустимое имя файла")
+    if not os.path.isfile(real):
+        raise HTTPException(status_code=404, detail="Файл не найден")
+    os.remove(real)
+    return {"deleted": name}
+
+
+def _product_usage(name: str):
+    hits = []
+    try:
+        import urllib.request
+        with urllib.request.urlopen(
+            "http://127.0.0.1:8055/items/products?limit=200&fields=name,image,gallery", timeout=5
+        ) as r:
+            data = json.load(r)
+        for p in data.get("data", []):
+            blob = json.dumps([p.get("image"), p.get("gallery")], ensure_ascii=False)
+            if name in blob:
+                hits.append(p.get("name") or "")
+    except Exception as e:
+        hits.append("Directus недоступен: " + str(e))
+    return hits
+
+
+def _files_usage(name: str):
+    hits = []
+    root = os.path.dirname(ASSETS_DIR)
+    skip = {".git", "node_modules", "_scripts", "reports", "backups", "assets", "dist", "venv"}
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [d for d in dirnames if d not in skip]
+        for fn in filenames:
+            if not fn.lower().endswith((".html", ".txt", ".js")):
+                continue
+            fp = os.path.join(dirpath, fn)
+            try:
+                with open(fp, "r", encoding="utf-8", errors="ignore") as fh:
+                    if name in fh.read():
+                        hits.append(os.path.relpath(fp, root).replace("\\", "/"))
+            except Exception:
+                pass
+    return hits
+
+
+@app.get("/gallery-api/usage")
+async def gallery_usage(file: str = ""):
+    name = _safe_name(file)
+    if not name:
+        raise HTTPException(status_code=400, detail="Не указано имя файла")
+    return {"file": name, "products": _product_usage(name), "files": _files_usage(name)}
 
 
 @app.post("/gallery-api/rename")

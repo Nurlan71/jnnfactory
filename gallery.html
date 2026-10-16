@@ -56,17 +56,17 @@
 <div class="wrap">
   <div class="panel">
     <div class="row">
-      <input type="password" id="keyInput" class="grow" placeholder="Ключ доступа (для загрузки и переименования)"/>
+      <input type="password" id="keyInput" class="grow" placeholder="Ключ доступа (для загрузки, переименования и удаления)"/>
       <button id="keyBtn" class="primary">Сохранить ключ</button>
     </div>
-    <div class="hint">Чтение галереи открыто, запись (загрузка, переименование) - только с ключом. Ключ хранится в этом браузере.</div>
+    <div class="hint">Чтение галереи открыто, запись (загрузка, переименование, удаление) - только с ключом. Ключ хранится в этом браузере.</div>
   </div>
 
   <div class="panel">
     <div class="drop" id="drop">
       <strong>Перетащите изображения сюда</strong><br/>
       или нажмите, чтобы выбрать файлы. Можно несколько сразу.
-      <div class="hint">JPG, PNG, WEBP, AVIF, GIF, SVG. Имя файла латиницей без пробелов - удобнее для SEO.</div>
+      <div class="hint">JPG, PNG, WEBP, AVIF, GIF, SVG. До 50 МБ на файл. Имя файла латиницей без пробелов - удобнее для SEO. Кнопка «Удалить» с предупреждением, если файл используется на сайте.</div>
     </div>
     <input type="file" id="fileInput" accept="image/*" multiple hidden/>
   </div>
@@ -94,7 +94,8 @@
   var API = '/gallery-api';
   var KEY_STORE = 'jnnGalleryKey';
   var files = [];
-  var IMG_RE = /\.(jpe?g|png|webp|avif|gif|svg)$/i;
+  var IMG_RE = /\.(jpe?g|jfif|png|webp|avif|gif|svg)$/i;
+  var UPLOAD_RE = /\.(jpe?g|jfif|png|webp|avif|gif|svg)$/i;
 
   var $ = function (s) { return document.querySelector(s); };
   var grid = $('#grid'), empty = $('#empty'), count = $('#count');
@@ -166,25 +167,68 @@
   function upload(list) {
     var k = getKey();
     if (!k) { toast('Сначала задайте ключ доступа', true); return; }
-    var items = Array.prototype.filter.call(list, function (f) { return f && f.type.indexOf('image/') === 0; });
-    if (!items.length) { toast('Нужны файлы изображений', true); return; }
+    // Фильтруем по расширению, а не по MIME: у части файлов (с телефона) тип пустой.
+    var items = [], bad = [];
+    Array.prototype.forEach.call(list, function (f) {
+      if (!f) return;
+      if (UPLOAD_RE.test(f.name || '')) items.push(f); else bad.push(f.name || 'без имени');
+    });
+    if (bad.length) toast('Не картинки, пропущено: ' + bad.join(', '), true);
+    if (!items.length) { toast('Нужны файлы изображений (jpg, png, webp, avif, gif, svg)', true); return; }
+
+    var big = items.filter(function (f) { return f.size > 50 * 1024 * 1024; });
+    if (big.length) {
+      items = items.filter(function (f) { return f.size <= 50 * 1024 * 1024; });
+      toast('Больше 50 МБ, пропущено: ' + big.map(function (f) { return f.name; }).join(', '), true);
+      if (!items.length) return;
+    }
 
     var fd = new FormData();
     items.forEach(function (f) { fd.append('files', f, f.name); });
 
-    var btn = null;
     toast('Загрузка: ' + items.length + ' файл(ов)...');
     fetch(API + '/upload', { method: 'POST', headers: { 'X-Gallery-Key': k }, body: fd })
-      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (r) {
+        if (r.status === 413) throw new Error('файл слишком большой для сервера (лимит 64 МБ на запрос)');
+        return r.json().then(function (j) { return { ok: r.ok, j: j }; });
+      })
       .then(function (res) {
         if (!res.ok) throw new Error((res.j && res.j.detail) || 'ошибка');
         var up = (res.j.uploaded || []).length;
         var sk = (res.j.skipped || []).length;
-        var er = (res.j.errors || []).length;
-        toast('Загружено: ' + up + (sk ? ', пропущено: ' + sk : '') + (er ? ', ошибок: ' + er : ''));
+        var errs = res.j.errors || [];
+        toast('Загружено: ' + up + (sk ? ', пропущено: ' + sk : '') + (errs.length ? ', ошибок: ' + errs.length : ''));
+        errs.concat(res.j.skipped || []).slice(0, 4).forEach(function (e) {
+          toast(e.name + ': ' + e.reason, true);
+        });
         load();
       })
       .catch(function (e) { toast('Ошибка загрузки: ' + e.message, true); });
+  }
+
+  function del(name) {
+    var k = getKey();
+    if (!k) { toast('Сначала задайте ключ доступа', true); return; }
+    fetch(API + '/usage?file=' + encodeURIComponent(name))
+      .then(function (r) { return r.ok ? r.json() : { products: [], files: [] }; })
+      .catch(function () { return { products: [], files: [] }; })
+      .then(function (u) {
+        var used = [];
+        if (u.products && u.products.length) used.push('товары: ' + u.products.join(', '));
+        if (u.files && u.files.length) used.push('файлы: ' + u.files.slice(0, 6).join(', '));
+        var warn = used.length
+          ? '\n\nВНИМАНИЕ: файл используется:\n- ' + used.join('\n- ') + '\n\nУдаление сломает картинку в этих местах.'
+          : '\n\nФайл нигде не используется.';
+        if (!confirm('Удалить файл ' + name + '?' + warn)) return;
+        fetch(API + '/delete?file=' + encodeURIComponent(name), { method: 'DELETE', headers: { 'X-Gallery-Key': k } })
+          .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+          .then(function (res) {
+            if (!res.ok) throw new Error((res.j && res.j.detail) || 'ошибка');
+            toast('Удалено: ' + name);
+            load();
+          })
+          .catch(function (e) { toast('Не удалось удалить: ' + e.message, true); });
+      });
   }
 
   function render() {
@@ -240,8 +284,15 @@
       bRen.textContent = 'Переименовать';
       bRen.addEventListener('click', function () { rename(f.name); });
 
+      var bDel = document.createElement('button');
+      bDel.className = 'small';
+      bDel.textContent = 'Удалить';
+      bDel.style.color = 'var(--err)';
+      bDel.addEventListener('click', function () { del(f.name); });
+
       btns.appendChild(bCopy);
       btns.appendChild(bRen);
+      btns.appendChild(bDel);
       body.appendChild(nm);
       body.appendChild(sub);
       body.appendChild(btns);

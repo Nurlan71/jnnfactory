@@ -63,7 +63,7 @@
       "url": "https://jnnfactory.online/",
       "logo": {
         "@type": "ImageObject",
-        "url": "https://jnnfactory.online/assets/photo.jpg",
+        "url": "https://jnnfactory.online/assets/Logo-JNN.jpg",
         "width": 256,
         "height": 256
       },
@@ -131,7 +131,7 @@
       "taxID": "02001202310372",
       "description": "Швейная фабрика полного цикла в Бишкеке: трикотаж оптом, пошив СТМ от 500 шт, готовые модели от 50 шт, собственный печатный цех шелкографии M&R.",
       "image": "https://jnnfactory.online/assets/og-cover.jpg",
-      "logo": "https://jnnfactory.online/assets/photo.jpg",
+      "logo": "https://jnnfactory.online/assets/Logo-JNN.jpg",
       "telephone": "+996-700-712-212",
       "email": "jnnwear@gmail.com",
       "priceRange": "от 280 сом",
@@ -388,7 +388,7 @@
             <div class="grid-3">
               <div>
                 <label>Фото 1 (Лицо):</label>
-                <img id="cur_p_prev1" class="img-prev" src="/assets/letuchka_nurlan.jpg">
+                <img id="cur_p_prev1" class="img-prev" src="/assets/favicon-tshirt.png">
                 <input type="file" id="file_inp_1" style="display:none;" accept="image/*" onchange="uploadProductImage(this, 1)">
                 <div style="display:flex; gap:4px; margin-bottom:6px;">
                   <button type="button" class="btn btn-secondary" style="flex:1;" onclick="document.getElementById('file_inp_1').click()">📁 Загрузить</button>
@@ -399,7 +399,7 @@
               </div>
               <div>
                 <label>Фото 2 (Детали):</label>
-                <img id="cur_p_prev2" class="img-prev" src="/assets/letuchka_nurlan.jpg">
+                <img id="cur_p_prev2" class="img-prev" src="/assets/favicon-tshirt.png">
                 <input type="file" id="file_inp_2" style="display:none;" accept="image/*" onchange="uploadProductImage(this, 2)">
                 <div style="display:flex; gap:4px; margin-bottom:6px;">
                   <button type="button" class="btn btn-secondary" style="flex:1;" onclick="document.getElementById('file_inp_2').click()">📁 Загрузить</button>
@@ -410,7 +410,7 @@
               </div>
               <div>
                 <label>Фото 3 (Спина):</label>
-                <img id="cur_p_prev3" class="img-prev" src="/assets/letuchka_nurlan.jpg">
+                <img id="cur_p_prev3" class="img-prev" src="/assets/favicon-tshirt.png">
                 <input type="file" id="file_inp_3" style="display:none;" accept="image/*" onchange="uploadProductImage(this, 3)">
                 <div style="display:flex; gap:4px; margin-bottom:6px;">
                   <button type="button" class="btn btn-secondary" style="flex:1;" onclick="document.getElementById('file_inp_3').click()">📁 Загрузить</button>
@@ -515,15 +515,15 @@
 
       document.getElementById('cur_p_img1').value = p.img_1 || '';
       document.getElementById('cur_p_alt1').value = p.alt_1 || '';
-      document.getElementById('cur_p_prev1').src = p.img_1 || '/assets/letuchka_nurlan.jpg';
+      document.getElementById('cur_p_prev1').src = p.img_1 || '/assets/favicon-tshirt.png';
 
       document.getElementById('cur_p_img2').value = p.img_2 || '';
       document.getElementById('cur_p_alt2').value = p.alt_2 || '';
-      document.getElementById('cur_p_prev2').src = p.img_2 || '/assets/letuchka_nurlan.jpg';
+      document.getElementById('cur_p_prev2').src = p.img_2 || '/assets/favicon-tshirt.png';
 
       document.getElementById('cur_p_img3').value = p.img_3 || '';
       document.getElementById('cur_p_alt3').value = p.alt_3 || '';
-      document.getElementById('cur_p_prev3').src = p.img_3 || '/assets/letuchka_nurlan.jpg';
+      document.getElementById('cur_p_prev3').src = p.img_3 || '/assets/favicon-tshirt.png';
 
       document.getElementById('breadcrumb').textContent = 'Товар > ' + (p.name || '');
     }
@@ -542,7 +542,7 @@
 
     function deleteMedia(num) {
       document.getElementById('cur_p_img' + num).value = '';
-      document.getElementById('cur_p_prev' + num).src = '/assets/letuchka_nurlan.jpg';
+      document.getElementById('cur_p_prev' + num).src = '/assets/favicon-tshirt.png';
       if (db.products && db.products[activeProdIndex]) {
         db.products[activeProdIndex]['img_' + num] = '';
       }
@@ -571,7 +571,7 @@
 
     function createNewProduct() {
       db.products.push({
-        name: "Новая позиция", price: 500, img_1: "/assets/letuchka_nurlan.jpg",
+        name: "Новая позиция", price: 500, img_1: "/assets/favicon-tshirt.png",
         bullets: "• 100% хлопок", faq: "Партии от 500 шт"
       });
       renderCatalogTree();
