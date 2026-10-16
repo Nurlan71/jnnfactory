@@ -1,5 +1,6 @@
-import json, os, shutil
-from fastapi import FastAPI, UploadFile, File
+import json, os, re, shutil, uuid
+from typing import List, Optional
+from fastapi import FastAPI, UploadFile, File, Header, HTTPException, Body
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -121,3 +122,123 @@ async def update_catalog(payload: dict):
     with open(DATA_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
     return {"status": "saved"}
+
+
+# ---------------------------------------------------------------------------
+# Галерея изображений: список, загрузка, переименование (/gallery-api/...)
+# Ключ доступа: переменная окружения JNN_GALLERY_KEY или файл admin/.gallery_key
+# ---------------------------------------------------------------------------
+GALLERY_KEY_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".gallery_key")
+GALLERY_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".avif", ".gif", ".svg"}
+GALLERY_HTML = os.path.join(os.path.dirname(ASSETS_DIR), "gallery.html")
+
+
+def _gallery_key() -> str:
+    key = (os.environ.get("JNN_GALLERY_KEY") or "").strip()
+    if key:
+        return key
+    try:
+        if os.path.exists(GALLERY_KEY_FILE):
+            with open(GALLERY_KEY_FILE, "r", encoding="utf-8") as f:
+                return f.read().strip()
+        key = uuid.uuid4().hex[:24]
+        with open(GALLERY_KEY_FILE, "w", encoding="utf-8") as f:
+            f.write(key)
+        try:
+            os.chmod(GALLERY_KEY_FILE, 0o600)
+        except Exception:
+            pass
+        return key
+    except Exception:
+        return ""
+
+
+def _check_key(key: Optional[str]) -> None:
+    actual = _gallery_key()
+    if not actual:
+        raise HTTPException(status_code=503, detail="Ключ галереи не настроен на сервере")
+    if not key or key != actual:
+        raise HTTPException(status_code=401, detail="Неверный ключ доступа")
+
+
+def _safe_name(name: str) -> str:
+    name = (name or "").strip().replace("\\", "/").split("/")[-1]
+    name = name.replace(" ", "-")
+    name = re.sub(r"[^\w.\-]", "", name, flags=re.UNICODE)
+    return name.lstrip(".")
+
+
+@app.get("/gallery-api/list")
+async def gallery_list():
+    items = []
+    if os.path.isdir(ASSETS_DIR):
+        for f in sorted(os.listdir(ASSETS_DIR)):
+            p = os.path.join(ASSETS_DIR, f)
+            if not os.path.isfile(p):
+                continue
+            if os.path.splitext(f)[1].lower() not in GALLERY_EXTS:
+                continue
+            st = os.stat(p)
+            items.append({
+                "name": f,
+                "size": st.st_size,
+                "mtime": int(st.st_mtime * 1000),
+                "url": "/assets/" + f,
+            })
+    return {"count": len(items), "files": items}
+
+
+@app.get("/gallery-api/key")
+async def gallery_key_status():
+    return {"configured": bool(_gallery_key())}
+
+
+@app.post("/gallery-api/upload")
+async def gallery_upload(files: List[UploadFile] = File(...), x_gallery_key: str = Header(default="")):
+    _check_key(x_gallery_key)
+    os.makedirs(ASSETS_DIR, exist_ok=True)
+    uploaded, skipped, errors = [], [], []
+    for f in files:
+        name = _safe_name(f.filename)
+        ext = os.path.splitext(name)[1].lower()
+        if not name or ext not in GALLERY_EXTS:
+            errors.append({"name": f.filename, "reason": "недопустимый формат или имя"})
+            continue
+        target = os.path.join(ASSETS_DIR, name)
+        if os.path.exists(target):
+            skipped.append({"name": name, "reason": "файл уже существует"})
+            continue
+        try:
+            content = await f.read()
+            with open(target, "wb") as buf:
+                buf.write(content)
+            uploaded.append({"name": name, "url": "/assets/" + name, "size": len(content)})
+        except Exception as e:
+            errors.append({"name": name, "reason": str(e)})
+    return {"uploaded": uploaded, "skipped": skipped, "errors": errors}
+
+
+@app.post("/gallery-api/rename")
+async def gallery_rename(payload: dict = Body(...), x_gallery_key: str = Header(default="")):
+    _check_key(x_gallery_key)
+    old = _safe_name(payload.get("old", ""))
+    new = _safe_name(payload.get("new", ""))
+    if not old or not new:
+        raise HTTPException(status_code=400, detail="Нужны оба имени файла")
+    if os.path.splitext(new)[1].lower() not in GALLERY_EXTS:
+        new = new + os.path.splitext(old)[1].lower()
+    src = os.path.join(ASSETS_DIR, old)
+    dst = os.path.join(ASSETS_DIR, new)
+    if not os.path.isfile(src):
+        raise HTTPException(status_code=404, detail="Исходный файл не найден")
+    if os.path.exists(dst):
+        raise HTTPException(status_code=409, detail="Файл с таким именем уже существует")
+    os.rename(src, dst)
+    return {"old": old, "name": new, "url": "/assets/" + new}
+
+
+@app.get("/gallery")
+async def gallery_page():
+    if not os.path.exists(GALLERY_HTML):
+        raise HTTPException(status_code=404, detail="gallery.html не найден")
+    return FileResponse(GALLERY_HTML)

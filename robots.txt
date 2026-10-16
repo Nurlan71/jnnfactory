@@ -5,6 +5,8 @@ User-agent: *
 Allow: /
 Disallow: /admin/
 Disallow: /api/
+Disallow: /gallery.html
+Disallow: /gallery-api/
 
 # --- Поисковые системы ---
 User-agent: YandexBot
