@@ -1,7 +1,8 @@
-// JNN Dynamic Catalog v3 — Template Card Pattern (Vanilla JS)
+// JNN Dynamic Catalog v4 — Template Card Pattern (Vanilla JS)
 // Рендерит каталог из Directus API, клонируя первую карточку как шаблон.
 // Главное фото берётся из M2M-галереи (первое фото в админке = главное),
 // резерв — поле image, затем первое из gallery. Плюс строка минимальной партии.
+// Товары со снятым флагом «Показывать в каталоге на главной» пропускаются.
 // При недоступности API оставляет статическую разметку нетронутой.
 
 (function () {
@@ -77,6 +78,14 @@
       if (!resp.ok) throw new Error('API ' + resp.status);
       var json = await resp.json();
       var products = json.data || [];
+
+      // Флаг из админки «Показывать в каталоге на главной» (show_in_catalog).
+      // Снят флаг — модель есть на сайте (своя страница), но в каталоге её нет.
+      // Отсутствие поля (старые записи) считаем «показывать».
+      products = products.filter(function (p) {
+        var v = p.show_in_catalog;
+        return !(v === false || v === 0 || v === 'false' || v === '0');
+      });
 
       if (!products.length) {
         console.log('JNN Catalog: нет товаров в Directus, оставляю статику');
