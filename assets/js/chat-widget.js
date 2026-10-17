@@ -98,7 +98,7 @@
       '.jnnc-fab-label{display:none;}',
 
       // окно
-      '.jnnc-panel{position:fixed;right:18px;bottom:18px;width:372px;max-width:calc(100vw - 24px);height:min(620px,calc(100vh - 36px));',
+      '.jnnc-panel{position:fixed;right:18px;bottom:18px;width:372px;max-width:calc(100vw - 24px);height:min(680px,calc(100vh - 36px));',
       'display:none;flex-direction:column;background:var(--jnnc-bg);border-radius:16px;overflow:hidden;',
       'box-shadow:0 24px 60px rgba(15,23,42,.28);border:1px solid rgba(15,23,42,.06);}',
       '.jnnc-root.jnnc-open .jnnc-panel{display:flex;}',
@@ -113,7 +113,7 @@
       '.jnnc-close{border:0;background:rgba(255,255,255,.16);color:#fff;width:30px;height:30px;border-radius:9px;cursor:pointer;font-size:16px;line-height:1;}',
       '.jnnc-close:hover{background:rgba(255,255,255,.28);}',
 
-      '.jnnc-list{flex:1 1 auto;overflow-y:auto;padding:14px;background:#fbfbfd;display:flex;flex-direction:column;gap:10px;}',
+      '.jnnc-list{flex:1 1 auto;min-height:190px;overflow-y:auto;padding:14px;background:#fbfbfd;display:flex;flex-direction:column;gap:10px;}',
       '.jnnc-msg{max-width:86%;padding:10px 12px;border-radius:13px;font-size:13.5px;line-height:1.45;white-space:pre-wrap;word-wrap:break-word;}',
       '.jnnc-bot{align-self:flex-start;background:var(--jnnc-bot);color:var(--jnnc-ink);border-bottom-left-radius:5px;}',
       '.jnnc-user{align-self:flex-end;background:var(--jnnc-accent);color:#fff;border-bottom-right-radius:5px;}',
@@ -121,6 +121,8 @@
       '.jnnc-wa{display:inline-block;margin-top:8px;font-size:12.5px;font-weight:600;color:#0a7d43;text-decoration:none;border-bottom:1px dashed #0a7d43;}',
 
       '.jnnc-chips{display:flex;flex-wrap:wrap;gap:7px;padding:0 14px 12px;background:#fbfbfd;}',
+      // Чипсы — подсказки для старта: после первой реплики прячем, чтобы лента была просторнее.
+      '.jnnc-root.jnnc-talked .jnnc-chips{display:none;}',
       '.jnnc-chip{border:1px solid var(--jnnc-line);background:#fff;color:var(--jnnc-ink);font-size:12.5px;padding:7px 11px;border-radius:999px;cursor:pointer;transition:.15s;}',
       '.jnnc-chip:hover{border-color:var(--jnnc-accent);color:var(--jnnc-accent-dark);}',
 
@@ -260,7 +262,7 @@
     foot.appendChild(input);
     foot.appendChild(sendBtn);
 
-    var note = el('div', 'jnnc-note', 'Отвечает ИИ-технолог по данным фабрики. Точный расчёт — у менеджера.');
+    var note = el('div', 'jnnc-note', 'Отвечает ИИ-технолог. Точный расчёт — у менеджера.');
 
     panel.appendChild(head);
     panel.appendChild(list);
@@ -294,9 +296,17 @@
 
   function renderHistory() {
     history.forEach(function (m) { addMessage(m.role === 'user' ? 'user' : 'bot', m.content, true); });
+    if (history.length) document.getElementById('jnnc-root').classList.add('jnnc-talked');
     if (!history.length && document.getElementById('jnnc-root').classList.contains('jnnc-open')) {
       addMessage('bot', GREETING);
     }
+  }
+
+  // Прокрутка ленты вниз: повторяем в следующем кадре, чтобы успел пересчитаться layout.
+  function scrollBottom() {
+    var toBottom = function () { if (list) list.scrollTop = list.scrollHeight; };
+    toBottom();
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(toBottom);
   }
 
   function addMessage(role, text, skipStore) {
@@ -307,7 +317,7 @@
       node.appendChild(waLink('Написать в WhatsApp'));
     }
     list.appendChild(node);
-    list.scrollTop = list.scrollHeight;
+    scrollBottom();
     if (!skipStore && role !== 'sys') {
       history.push({ role: role === 'user' ? 'user' : 'assistant', content: text });
       saveHistory();
@@ -322,7 +332,7 @@
       t.id = 'jnnc-typing';
       t.appendChild(el('i')); t.appendChild(el('i')); t.appendChild(el('i'));
       list.appendChild(t);
-      list.scrollTop = list.scrollHeight;
+      scrollBottom();
     } else if (!on && existing) {
       existing.parentNode.removeChild(existing);
     }
@@ -348,6 +358,9 @@
     var context = history.slice(-10);
     addMessage('user', text);
     typing(true);
+    // Диалог начался: прячем стартовые чипсы, освобождая место под ответы.
+    var root = document.getElementById('jnnc-root');
+    if (root) root.classList.add('jnnc-talked');
 
     var payload = {
       message: text,
@@ -439,7 +452,7 @@
     box.appendChild(submit);
     box.appendChild(el('div', 'jnnc-hint', 'Отправляя контакт, вы соглашаетесь на обработку данных для расчёта заказа.'));
     list.appendChild(box);
-    list.scrollTop = list.scrollHeight;
+    scrollBottom();
     setTimeout(function () { tel.focus(); }, 80);
   }
 
