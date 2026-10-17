@@ -3,16 +3,19 @@
 Маршруты (подключаются в admin/main.py):
     POST /api/chat          — реплика клиента, ответ ассистента
     POST /api/chat/lead     — контакт клиента: лог + уведомление в Telegram
-    GET  /api/chat/health   — состояние: провайдер, размер контекста, число лидов
+    GET  /api/chat/health   — состояние: провайдеры, размер контекста, число лидов
 
 Провайдеры по порядку (первый доступный):
-    1. Gemini (GEMINI_API_KEY) — если есть кредиты;
-    2. Groq  (GROQ_API_KEY)    — быстрая модель, сейчас основной;
+    1. Gemini (GEMINI_API_KEY) — если на счёте есть кредиты;
+    2. Groq  (GROQ_API_KEY)    — быстрые модели, работают сейчас;
     3. Ответ по правилам из базы знаний — если внешние API недоступны.
 
-Контекст берётся из llms-full.txt в корне сайта: правила фабрики
-(склад от 50 шт, пошив и СТМ от 500 шт, M&R до 12 цветов, футер 340 г/м²,
-ОсОО «Айдана Стайл», карго 5–12 дней и т. д.). Температура 0.3.
+База знаний — компактный admin/chat-facts.md (выжимка из llms-full.txt):
+правила фабрики (склад от 50 шт, пошив и СТМ от 500 шт, M&R до 12 цветов,
+футер 340 г/м², ОсОО «Айдана Стайл», карго 5–12 дней и т. д.). Температура 0.3.
+
+Лиды пишутся в /var/lib/jnn-chat/leads.jsonl (вне корня сайта) и, если заданы
+TELEGRAM_BOT_TOKEN и TELEGRAM_CHAT_ID, уходят уведомлением в Telegram.
 """
 
 from __future__ import annotations
@@ -35,8 +38,12 @@ from pydantic import BaseModel, Field
 # Пути и настройки
 # ---------------------------------------------------------------------------
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # /var/www/jnnfactory
-CONTEXT_FILE = os.environ.get("JNN_CHAT_CONTEXT") or os.path.join(ROOT, "llms-full.txt")
-LEADS_FILE = os.environ.get("JNN_CHAT_LEADS") or os.path.join(ROOT, "admin", "leads.jsonl")
+# Компактный факт-лист для чата: короткий контекст = меньше токенов и меньше «фантазий».
+CONTEXT_FILE = os.environ.get("JNN_CHAT_CONTEXT") or os.path.join(ROOT, "admin", "chat-facts.md")
+FULL_CONTEXT_FILE = os.path.join(ROOT, "llms-full.txt")
+MAX_CONTEXT_CHARS = 7000
+# Лиды пишем вне корня сайта, чтобы файл нельзя было скачать по URL.
+LEADS_FILE = os.environ.get("JNN_CHAT_LEADS") or "/var/lib/jnn-chat/leads.jsonl"
 
 GEMINI_KEY = (os.environ.get("GEMINI_API_KEY") or "").strip()
 GROQ_KEY = (os.environ.get("GROQ_API_KEY") or "").strip()
@@ -44,10 +51,15 @@ TELEGRAM_TOKEN = (os.environ.get("TELEGRAM_BOT_TOKEN") or "").strip()
 TELEGRAM_CHAT = (os.environ.get("TELEGRAM_CHAT_ID") or "").strip()
 
 GEMINI_MODELS = ("gemini-flash-latest", "gemini-3.5-flash-lite", "gemini-2.5-flash")
-GROQ_MODELS = ("openai/gpt-oss-120b", "qwen/qwen3.8-27b")
+# У каждой модели Groq свой лимит токенов в минуту, поэтому в цепочке их несколько.
+GROQ_MODELS = ("openai/gpt-oss-120b", "openai/gpt-oss-20b", "qwen/qwen3.8-27b")
 TEMPERATURE = 0.3
-MAX_OUTPUT_TOKENS = 700
+MAX_OUTPUT_TOKENS = 600
 HTTP_TIMEOUT = 40
+# Cloudflare у Groq отбивает запросы с User-Agent вида «Python-urllib» (error 1010).
+USER_AGENT = "JNNFactoryChat/1.0 (+https://jnnfactory.online)"
+# Сколько последних реплик диалога отправляем в модель (экономия лимита токенов).
+HISTORY_TURNS = 6
 
 # Ограничения, чтобы ключ не выжгли: на IP и общий суточный.
 RATE_PER_IP = int(os.environ.get("JNN_CHAT_RATE_PER_IP", "15"))
@@ -55,7 +67,10 @@ RATE_WINDOW_SEC = int(os.environ.get("JNN_CHAT_RATE_WINDOW", "600"))
 RATE_PER_DAY = int(os.environ.get("JNN_CHAT_RATE_PER_DAY", "1200"))
 
 # Когда у Gemini кончились кредиты — не долбим его каждым запросом.
+# Отдельно запоминаем «остывающие» модели Groq: у free-tier лимит 8000 токенов в минуту.
 _gemini_cooldown_until = 0.0
+_groq_cooldown: Dict[str, float] = {}
+GROQ_COOLDOWN_SEC = 20
 _model_lock = threading.Lock()
 _rate_lock = threading.Lock()
 _ip_hits: Dict[str, deque] = defaultdict(deque)
@@ -142,27 +157,33 @@ FALLBACK: List[Tuple[str, str]] = [
 _context_cache: Dict[str, Any] = {"mtime": 0.0, "system": ""}
 
 
-def system_prompt() -> str:
-    """Системный промпт: правила фабрики из llms-full.txt + жёсткие ограничения."""
-    mtime = 0.0
+def _read_context() -> str:
+    """Компактный факт-лист бота; если его нет — обрезанный llms-full.txt."""
     try:
-        mtime = os.path.getmtime(CONTEXT_FILE)
+        with open(CONTEXT_FILE, "r", encoding="utf-8") as fh:
+            return fh.read().strip()
     except OSError:
         pass
+    try:
+        with open(FULL_CONTEXT_FILE, "r", encoding="utf-8") as fh:
+            full = fh.read()
+    except OSError as exc:
+        return f"База знаний недоступна ({exc}). Отвечай только общими правилами."
+    # Раздел «Полезные материалы» — это ссылки на страницы, для ответов не нужен.
+    full = re.sub(r"\n## 8\..*?(?=\n## 9\.)", "\n", full, flags=re.S)
+    return full.strip()[:MAX_CONTEXT_CHARS]
+
+
+def system_prompt() -> str:
+    """Системный промпт: база знаний фабрики + жёсткие правила ответа."""
+    mtime = tuple(
+        os.path.getmtime(path) if os.path.exists(path) else 0.0
+        for path in (CONTEXT_FILE, FULL_CONTEXT_FILE)
+    )
     if _context_cache["system"] and _context_cache["mtime"] == mtime:
         return _context_cache["system"]
 
-    knowledge = ""
-    try:
-        with open(CONTEXT_FILE, "r", encoding="utf-8") as fh:
-            knowledge = fh.read()
-    except OSError as exc:
-        knowledge = f"База знаний недоступна ({exc}). Отвечай только общими правилами."
-
-    # Раздел «Полезные материалы» — это ссылки на страницы, для ответов не нужен.
-    knowledge = re.sub(r"\n## 8\..*?(?=\n## 9\.)", "\n", knowledge, flags=re.S).strip()
-
-    system = f"{SYSTEM_RULES}\n\n=== БАЗА ЗНАНИЙ JNN FACTORY ===\n{knowledge}"
+    system = f"{SYSTEM_RULES}\n\n=== БАЗА ЗНАНИЙ JNN FACTORY ===\n{_read_context()}"
     _context_cache.update(mtime=mtime, system=system)
     return system
 
@@ -174,6 +195,8 @@ def _post_json(url: str, payload: dict, headers: Dict[str, str], timeout: int = 
     body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
     req = urllib.request.Request(url, data=body, method="POST")
     req.add_header("Content-Type", "application/json")
+    req.add_header("Accept", "application/json")
+    req.add_header("User-Agent", USER_AGENT)
     for key, value in headers.items():
         req.add_header(key, value)
     with urllib.request.urlopen(req, timeout=timeout) as resp:
@@ -220,7 +243,7 @@ def _gemini_reply(system: str, messages: List[Dict[str, str]]) -> Optional[str]:
             except Exception:
                 pass
             print(f"[chat] Gemini {model}: HTTP {exc.code} {detail[:160]}", flush=True)
-            if "RESOURCE_EXHAUSTED" in detail or exc.code in (429, 403):
+            if "RESOURCE_EXHAUSTED" in detail or exc.code in (402, 403, 429):
                 with _model_lock:
                     _gemini_cooldown_until = time.time() + 1800  # полчаса не трогаем
                 return None
@@ -242,13 +265,21 @@ def _groq_reply(system: str, messages: List[Dict[str, str]]) -> Optional[str]:
     if not GROQ_KEY:
         return None
     payload = {
-        "model": GROQ_MODELS[0],
         "temperature": TEMPERATURE,
         "max_tokens": MAX_OUTPUT_TOKENS,
         "messages": [{"role": "system", "content": system}] + messages,
     }
     for model in GROQ_MODELS:
+        now = time.time()
+        if _groq_cooldown.get(model, 0.0) > now:
+            continue  # модель недавно отдала 429 — не тратим на неё время
         payload["model"] = model
+        if model.startswith("openai/gpt-oss"):
+            # Это reasoning-модели: при низком уровне размышлений ответ быстрее
+            # и не выедает лимит токенов в минуту.
+            payload["reasoning_effort"] = "low"
+        else:
+            payload.pop("reasoning_effort", None)
         try:
             data = _post_json(
                 "https://api.groq.com/openai/v1/chat/completions",
@@ -262,6 +293,9 @@ def _groq_reply(system: str, messages: List[Dict[str, str]]) -> Optional[str]:
             except Exception:
                 pass
             print(f"[chat] Groq {model}: HTTP {exc.code} {detail[:160]}", flush=True)
+            if exc.code == 429:
+                with _model_lock:
+                    _groq_cooldown[model] = time.time() + GROQ_COOLDOWN_SEC
             continue
         except Exception as exc:  # noqa: BLE001
             print(f"[chat] Groq {model}: {exc}", flush=True)
@@ -271,6 +305,8 @@ def _groq_reply(system: str, messages: List[Dict[str, str]]) -> Optional[str]:
         except Exception:
             continue
         if text and text.strip():
+            with _model_lock:
+                _groq_cooldown.pop(model, None)
             return text.strip()
     return None
 
@@ -349,23 +385,6 @@ def notify_telegram(text: str) -> bool:
         return False
 
 
-def read_leads(limit: int = 50) -> List[dict]:
-    items: List[dict] = []
-    try:
-        with open(LEADS_FILE, "r", encoding="utf-8") as fh:
-            for line in fh:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    items.append(json.loads(line))
-                except ValueError:
-                    continue
-    except OSError:
-        return []
-    return items[-limit:][::-1]
-
-
 def count_leads() -> int:
     try:
         with open(LEADS_FILE, "r", encoding="utf-8") as fh:
@@ -404,16 +423,18 @@ class LeadRequest(BaseModel):
 @router.get("/api/chat/health")
 def chat_health() -> dict:
     system = system_prompt()
+    now = time.time()
+    groq_ready = [m for m in GROQ_MODELS if _groq_cooldown.get(m, 0.0) <= now]
     return {
         "ok": True,
         "providers": {
-            "gemini": bool(GEMINI_KEY) and time.time() >= _gemini_cooldown_until,
-            "groq": bool(GROQ_KEY),
+            "gemini": bool(GEMINI_KEY) and now >= _gemini_cooldown_until,
+            "groq": bool(GROQ_KEY) and bool(groq_ready),
             "rules": True,
         },
-        "gemini_cooldown_sec": max(0, int(_gemini_cooldown_until - time.time())),
+        "gemini_cooldown_sec": max(0, int(_gemini_cooldown_until - now)),
+        "groq_ready_models": groq_ready,
         "context_chars": len(system),
-        "model": GROQ_MODELS[0] if GROQ_KEY else "rules",
         "leads": count_leads(),
         "telegram": bool(TELEGRAM_TOKEN and TELEGRAM_CHAT),
     }
@@ -436,8 +457,8 @@ def chat_reply(payload: ChatRequest, request: Request) -> JSONResponse:
         )
 
     history = [
-        {"role": "user" if m.role == "user" else "assistant", "content": (m.content or "")[:1500]}
-        for m in payload.history[-10:]
+        {"role": "user" if m.role == "user" else "assistant", "content": (m.content or "")[:800]}
+        for m in payload.history[-HISTORY_TURNS:]
         if (m.content or "").strip()
     ]
     user_turns = sum(1 for m in history if m["role"] == "user") + 1
@@ -495,9 +516,3 @@ def chat_lead(payload: LeadRequest, request: Request) -> JSONResponse:
     telegram = notify_telegram(text)
 
     return JSONResponse({"ok": saved, "telegram": telegram})
-
-
-@router.get("/api/chat/leads")
-def chat_leads(limit: int = 50) -> dict:
-    items = read_leads(max(1, min(limit, 200)))
-    return {"count": count_leads(), "items": items}
