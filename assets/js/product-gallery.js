@@ -1,6 +1,7 @@
 // JNN Product Gallery v3 — галерея товара из Directus (до 20 фото).
-// Источник фото: M2M products.gallery_files -> directus_files (порядок задаётся
-// перетаскиванием в админке; первое фото - главное). Резерв: поля gallery / image
+// Источник фото: M2M products.gallery -> directus_files (junction products_files;
+// порядок задаётся перетаскиванием в админке; первое фото - главное).
+// Резерв: старое имя поля gallery_files, текстовое gallery_urls и image
 // (пути /assets/...), затем статическая вёрстка Tilda.
 // Режим A: контейнер [data-gallery-auto] -> модуль JNNGallery (главное фото + миниатюры).
 // Режим B: статическая сетка Tilda .t989__gallery-wrapper — ячейки и стили сохраняются,
@@ -11,9 +12,28 @@
   'use strict';
 
   var MAX = 20;
-  var FIELDS = 'name,price,image,gallery,min_order,slug,gallery_files.directus_files_id,gallery_files.sort';
-  var API = '/api/items/products?fields=' + FIELDS + '&limit=1&filter[slug][_eq]=';
-  var API_ALL = '/api/items/products?fields=' + FIELDS + '&limit=100';
+  // Поля галереи: gallery — M2M-поле (Directus отдаёт junction-строки
+  // directus_files_id + sort). FIELDS_LEGACY — старое имя поля (совместимость).
+  var FIELDS = 'name,price,image,min_order,slug,gallery_urls,gallery.directus_files_id,gallery.sort';
+  var FIELDS_LEGACY = 'name,price,image,min_order,slug,gallery,gallery_files.directus_files_id,gallery_files.sort';
+  var API = '/api/items/products?fields=';
+  var QUERY_ONE = '&limit=1&filter[slug][_eq]=';
+  var QUERY_ALL = '&limit=100';
+
+  function request(fields, tail) {
+    return fetch(API + fields + tail).then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    });
+  }
+
+  // Новые поля; если схема ещё старая (нет gallery) — повторяем со gallery_files.
+  function apiGet(tail) {
+    return request(FIELDS, tail).catch(function (e) {
+      console.warn('JNN Product Gallery: повтор со старым полем gallery_files (' + e.message + ')');
+      return request(FIELDS_LEGACY, tail);
+    });
+  }
 
   function slugFromUrl() {
     var p = location.pathname.replace(/\/+$/, '');
@@ -42,36 +62,51 @@
     return [];
   }
 
-  function urlOf(item) {
-    if (!item) return '';
-    if (typeof item === 'string') return item;
-    return item.url || item.src || item.data_url || item.filename_download || '';
+  // Ссылка на фото товара. Понимает все варианты значения из Directus:
+  // прямой путь/URL ("/assets/photo.jpg", "https://..."), id файла ("uuid"),
+  // объект файла ({url}) и junction-строку M2M ({directus_files_id: "uuid"}
+  // или {directus_files_id: {id: "uuid"}}). Возвращает путь /assets/<id>.
+  function fileUrl(value) {
+    if (!value) return '';
+    if (typeof value === 'string') {
+      var s = value.trim();
+      if (!s) return '';
+      return (/^https?:\/\//.test(s) || s.charAt(0) === '/') ? abs(s) : '/assets/' + s;
+    }
+    if (typeof value === 'object') {
+      var direct = value.url || value.src || value.data_url;
+      if (direct) return abs(direct);
+      var id = value.directus_files_id || value.id || value.file;
+      if (id && typeof id === 'object') id = id.id || id.uuid;
+      if (id) return fileUrl(String(id));
+    }
+    return '';
   }
 
   // Фото из M2M-галереи Directus: junction-строки, порядок по полю sort.
+  // Новое имя поля — gallery; старое (на случай отката схемы) — gallery_files.
   function m2mImages(product) {
-    var rows = product.gallery_files;
+    var rows = product.gallery;
+    if (!Array.isArray(rows) || !rows.length) rows = product.gallery_files;
     if (!Array.isArray(rows) || !rows.length) return [];
     return rows.slice()
       .sort(function (a, b) { return ((a && a.sort) || 0) - ((b && b.sort) || 0); })
-      .map(function (r) {
-        var id = r && (r.directus_files_id || (typeof r === 'string' ? r : ''));
-        return id ? '/assets/' + id : '';
-      })
+      .map(fileUrl)
       .filter(Boolean);
   }
 
   function collectImages(product) {
     var urls = m2mImages(product);
     if (!urls.length) {
-      // Резерв: старое поле gallery (пути/объекты) + image
-      parseList(product.gallery).forEach(function (item) {
-        var u = urlOf(item);
-        if (u) urls.push(abs(u));
+      // Резерв: текстовое gallery_urls (новое имя) или gallery (старое) + image
+      var legacy = (product.gallery_urls !== undefined) ? product.gallery_urls : product.gallery;
+      parseList(legacy).forEach(function (item) {
+        var u = fileUrl(item);
+        if (u) urls.push(u);
       });
       parseList(product.image).forEach(function (item) {
-        var u = urlOf(item);
-        if (u) urls.unshift(abs(u));
+        var u = fileUrl(item);
+        if (u) urls.unshift(u);
       });
     }
     var seen = {}, out = [];
@@ -178,13 +213,11 @@
   // women-hoodies-oversize, а слаг товара women-hoodies) — берём самый длинный
   // слаг-префикс адреса.
   function findProduct(slug) {
-    return fetch(API + encodeURIComponent(slug))
-      .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+    return apiGet(QUERY_ONE + encodeURIComponent(slug))
       .then(function (j) {
         var p = (j.data || [])[0];
         if (p) return p;
-        return fetch(API_ALL)
-          .then(function (r2) { return r2.ok ? r2.json() : { data: [] }; })
+        return apiGet(QUERY_ALL)
           .then(function (j2) {
             var best = null;
             (j2.data || []).forEach(function (cand) {

@@ -2,7 +2,7 @@
 """publish_product.py — полный цикл публикации товара из Directus на сайт.
 
 Что делает один вызов:
-  1. читает товар из Directus (коллекция products + галерея gallery_files);
+  1. читает товар из Directus (коллекция products + галерея gallery);
   2. собирает страницу /<slug>.html по эталонному Tilda-шаблону
      women-tshirt-letuchka.html: те же блоки (t989 галерея, t180/T165 карточка,
      t050+t165 FAQ, подвал с WhatsApp) и те же защитные проверки, что в
@@ -138,10 +138,19 @@ def http_json(url: str, timeout: int = 25):
 # ---------------------------------------------------------------------------
 
 def fetch_products() -> list[dict]:
-    """Все товары с галереями (поля берём целиком — схема может меняться)."""
-    query = urllib.parse.urlencode({"limit": 500, "fields": "*,gallery_files.*", "sort": "sort"})
-    payload = http_json(f"{DIRECTUS}/items/products?{query}")
-    return payload.get("data") or []
+    """Все товары с галереями (поля берём целиком — схема может меняться).
+
+    Галерея товара — M2M-поле products.gallery (junction products_files -> directus_files).
+    Резерв: старое имя gallery_files и текстовое gallery_urls — на случай отката схемы.
+    """
+    for fields in ("*,gallery.*", "*,gallery_files.*"):
+        query = urllib.parse.urlencode({"limit": 500, "fields": fields, "sort": "sort"})
+        try:
+            payload = http_json(f"{DIRECTUS}/items/products?{query}")
+        except PublishError:
+            continue
+        return payload.get("data") or []
+    return []
 
 
 def slug_of(product: dict) -> str:
@@ -169,12 +178,24 @@ def price_of(product: dict) -> str:
 
 
 def photos_of(product: dict) -> list[str]:
-    """Фото товара: M2M gallery_files (по sort), иначе поле image."""
+    """Фото товара: M2M-галерея (сначала gallery, затем старое имя gallery_files),
+    порядок по полю sort, иначе — поле image."""
     rows = []
-    for index, row in enumerate(product.get("gallery_files") or []):
+    gallery = []
+    for key in ("gallery", "gallery_files"):
+        value = product.get(key)
+        if isinstance(value, list) and value:
+            gallery = value
+            break
+    for index, row in enumerate(gallery):
+        if isinstance(row, str):
+            # старый формат: прямые ссылки вида /assets/... в поле gallery_urls
+            if row.startswith(("http", "/")):
+                rows.append((index, index, row))
+            continue
         if not isinstance(row, dict):
             continue
-        file_id = row.get("directus_files_id")
+        file_id = row.get("directus_files_id", row.get("id"))
         if isinstance(file_id, dict):
             file_id = file_id.get("id")
         if not file_id:
@@ -183,9 +204,9 @@ def photos_of(product: dict) -> list[str]:
             order = int(row.get("sort"))
         except (TypeError, ValueError):
             order = index
-        rows.append((order, index, str(file_id)))
+        rows.append((order, index, f"/assets/{file_id}"))
     rows.sort()
-    photos = [f"/assets/{file_id}" for _, _, file_id in rows]
+    photos = [value for _, _, value in rows]
     if not photos:
         image = text_of(product.get("image")).strip()
         if image:
@@ -364,7 +385,7 @@ def build_values(product: dict, products: list[dict]) -> dict:
     values = specs["values"]
     photos = photos_of(product)
     if not photos:
-        raise PublishError(f"[{slug}] нет фото: заполните gallery_files (или image) в Directus")
+        raise PublishError(f"[{slug}] нет фото: заполните галерею (gallery) или image в Directus")
 
     lead = plain_text(product.get("description")).split("\n")
     if len(lead) == 1 and len(lead[0]) > 120:

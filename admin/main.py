@@ -251,15 +251,26 @@ async def gallery_delete(file: str = "", x_gallery_key: str = Header(default="")
 
 
 def _product_usage(name: str):
+    """Ищет имя файла в товарах: главное фото (image), M2M-галерея (gallery)
+    и старое текстовое поле gallery_urls."""
     hits = []
     try:
         import urllib.request
-        with urllib.request.urlopen(
-            "http://127.0.0.1:8055/items/products?limit=200&fields=name,image,gallery", timeout=5
-        ) as r:
-            data = json.load(r)
+        base = "http://127.0.0.1:8055/items/products?limit=200&fields="
+
+        def pull(fields):
+            with urllib.request.urlopen(base + fields, timeout=5) as r:
+                return json.load(r)
+
+        try:
+            data = pull("name,image,gallery_urls,gallery.directus_files_id.filename_download")
+        except Exception:
+            data = pull("name,image,gallery")
         for p in data.get("data", []):
-            blob = json.dumps([p.get("image"), p.get("gallery")], ensure_ascii=False)
+            blob = json.dumps(
+                [p.get("image"), p.get("gallery_urls"), p.get("gallery"), p.get("gallery_files")],
+                ensure_ascii=False,
+            )
             if name in blob:
                 hits.append(p.get("name") or "")
     except Exception as e:

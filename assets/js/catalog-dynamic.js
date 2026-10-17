@@ -1,7 +1,8 @@
 // JNN Dynamic Catalog v5 — Template Card Pattern (Vanilla JS)
 // Рендерит каталог из Directus API, клонируя первую карточку как шаблон.
-// Главное фото берётся из M2M-галереи (первое фото в админке = главное),
-// резерв — поле image, затем первое из gallery. Плюс строка минимальной партии.
+// Главное фото берётся из M2M-галереи products.gallery (junction products_files,
+// первое фото в админке = главное), резерв — старое имя gallery_files, поле image
+// и текстовое gallery_urls. Плюс строка минимальной партии.
 // Товары со снятым флагом «Показывать в каталоге на главной» пропускаются.
 // При недоступности API оставляет статическую разметку нетронутой.
 
@@ -11,6 +12,32 @@
   // Заглушка (иконка-футболка) показывается ТОЛЬКО если у товара нет фото.
   var PLACEHOLDER = '/assets/favicon-tshirt.png';
 
+  // Источники данных: сначала свой прокси на сайте, затем Directus напрямую.
+  var API_BASES = ['/api/items/products', 'https://admin.jnnfactory.online/items/products'];
+  // Новое имя M2M-поля галереи — gallery; старое — gallery_files (совместимость).
+  var FIELDS = '*,gallery.directus_files_id,gallery.sort';
+  var FIELDS_LEGACY = '*,gallery_files.directus_files_id,gallery_files.sort';
+
+  async function loadProducts() {
+    var tries = [
+      API_BASES[0] + '?fields=' + FIELDS,
+      API_BASES[1] + '?fields=' + FIELDS,
+      API_BASES[0] + '?fields=' + FIELDS_LEGACY,
+      API_BASES[1] + '?fields=' + FIELDS_LEGACY
+    ];
+    for (var i = 0; i < tries.length; i++) {
+      try {
+        var resp = await fetch(tries[i]);
+        if (!resp.ok) throw new Error('API ' + resp.status);
+        var json = await resp.json();
+        if (json && Array.isArray(json.data)) return json.data;
+      } catch (e) {
+        console.warn('JNN Catalog: ' + tries[i] + ' — ' + e.message);
+      }
+    }
+    return null;
+  }
+
   // Первое фото M2M-галереи товара (порядок задаётся в админке перетаскиванием).
   function firstFileUrl(files) {
     if (!Array.isArray(files) || !files.length) return '';
@@ -18,8 +45,26 @@
       return ((a && a.sort) || 0) - ((b && b.sort) || 0);
     });
     for (var i = 0; i < rows.length; i++) {
-      var id = rows[i] && (rows[i].directus_files_id || (typeof rows[i] === 'string' ? rows[i] : ''));
-      if (id) return '/assets/' + id;
+      var url = fileUrl(rows[i]);
+      if (url) return url;
+    }
+    return '';
+  }
+
+  // Ссылка на фото: путь/URL, id файла или junction-строка directus_files.
+  function fileUrl(value) {
+    if (!value) return '';
+    if (typeof value === 'string') {
+      var s = value.trim();
+      if (!s) return '';
+      return (/^https?:\/\//.test(s) || s.charAt(0) === '/') ? s : '/assets/' + s;
+    }
+    if (typeof value === 'object') {
+      var direct = value.url || value.src || value.data_url;
+      if (direct) return direct;
+      var id = value.directus_files_id || value.id || value.file;
+      if (id && typeof id === 'object') id = id.id || id.uuid;
+      if (id) return fileUrl(String(id));
     }
     return '';
   }
@@ -73,11 +118,8 @@
     if (!templateCard) return;
 
     try {
-      var resp = await fetch('https://admin.jnnfactory.online/items/products'
-        + '?fields=*,gallery_files.directus_files_id,gallery_files.sort');
-      if (!resp.ok) throw new Error('API ' + resp.status);
-      var json = await resp.json();
-      var products = json.data || [];
+      var products = await loadProducts();
+      if (!products) throw new Error('API недоступен');
 
       // Флаг из админки «Показывать в каталоге на главной» (show_in_catalog).
       // Снят флаг — модель есть на сайте (своя страница), но в каталоге её нет.
@@ -152,9 +194,9 @@
         // Фото (первое из галереи товара). Если фото нет — подставляем заглушку-логотип.
         var img = card.querySelector('.cat-img img');
         if (img) {
-          var firstImg = firstFileUrl(p.gallery_files);
+          var firstImg = firstFileUrl(p.gallery) || firstFileUrl(p.gallery_files);
           if (!firstImg) firstImg = getFirstImage(p.image || p.img_1);
-          if (!firstImg) firstImg = getFirstImage(p.gallery);
+          if (!firstImg) firstImg = getFirstImage(p.gallery_urls);
           img.src = firstImg || PLACEHOLDER;
           img.alt = p.name || '';
         }
