@@ -118,7 +118,7 @@
       '.jnnc-bot{align-self:flex-start;background:var(--jnnc-bot);color:var(--jnnc-ink);border-bottom-left-radius:5px;}',
       '.jnnc-user{align-self:flex-end;background:var(--jnnc-accent);color:#fff;border-bottom-right-radius:5px;}',
       '.jnnc-sys{align-self:center;background:transparent;color:var(--jnnc-muted);font-size:11.5px;text-align:center;max-width:100%;}',
-      '.jnnc-wa{display:inline-block;margin-top:8px;font-size:12.5px;font-weight:600;color:#0a7d43;text-decoration:none;border-bottom:1px dashed #0a7d43;}',
+      '.jnnc-wa{display:block;width:max-content;margin-top:9px;font-size:12.5px;font-weight:600;color:#0a7d43;text-decoration:none;border-bottom:1px dashed #0a7d43;}',
 
       '.jnnc-chips{display:flex;flex-wrap:wrap;gap:7px;padding:0 14px 12px;background:#fbfbfd;}',
       // Чипсы — подсказки для старта: после первой реплики прячем, чтобы лента была просторнее.
