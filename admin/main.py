@@ -13,10 +13,19 @@ ASSETS_DIR = "/var/www/jnnfactory/assets"
 if os.path.exists(ASSETS_DIR):
     app.mount("/assets", StaticFiles(directory=ASSETS_DIR), name="assets")
 
+# ИИ-чат на сайте: /api/chat, /api/chat/lead, /api/chat/health, /api/chat/leads.
+# Импорт в try/except, чтобы сбой чата не уронил админку.
+try:
+    from admin import chat_api as _chat  # noqa: E402
+
+    app.include_router(_chat.router)
+except Exception as _chat_exc:  # noqa: BLE001
+    print(f"[chat] модуль чата не подключён: {_chat_exc}", flush=True)
+
+
 @app.get("/")
 async def root():
     return FileResponse(ADMIN_HTML)
-
 @app.get("/api/content")
 async def get_content():
     if os.path.exists(DATA_FILE):
