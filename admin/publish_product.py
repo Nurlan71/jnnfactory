@@ -48,13 +48,18 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-VERSION = "2026-10-16.1"
+VERSION = "2026-10-17.1"
 
 SITE = (os.environ.get("JNN_SITE_URL") or "https://jnnfactory.online").rstrip("/")
 SITE_ROOT = (os.environ.get("JNN_SITE_ROOT") or "/var/www/jnnfactory").rstrip("/\\")
 DIRECTUS = (os.environ.get("JNN_DIRECTUS_URL") or "http://127.0.0.1:8055").rstrip("/")
 
-TEMPLATE_NAME = "women-tshirt-letuchka.html"
+# Эталон вёрстки — отдельный файл, а не живая страница товара: страница-эталон
+# сама перезаписывается публикатором, и если читать шаблон из неё, второй прогон
+# не находит исходных подстрок (title/h1/FAQ эталона). Каталог admin/ закрыт
+# в nginx (return 404), поэтому шаблон наружу не отдаётся.
+TEMPLATE_DIR = os.path.join("admin", "templates")
+TEMPLATE_NAME = "product.html"
 TEMPLATE_SLUG = "women-tshirt-letuchka"
 TEMPLATE_H1 = "Футболка «Летучка»"
 CANON_MIN_ORDER = "Минимальная партия под заказ (СТМ): от 500 шт. Готовые модели со склада: от 50 шт."
@@ -288,7 +293,9 @@ def escape(value: str) -> str:
 
 def strip_gender(name: str) -> str:
     match = GENDER_TAIL.match(name.strip())
-    if match and len(match.group("base").split()) >= 1:
+    # Пол оставляем в H1, если без него остаётся одно слово: «Худи женское» →
+    # «Худи» теряет смысл (ср. «Футболка «Летучка» женская» → «Футболка «Летучка»»).
+    if match and len(match.group("base").split()) >= 2:
         return match.group("base").strip()
     return name.strip()
 
@@ -426,6 +433,7 @@ def build_values(product: dict, products: list[dict]) -> dict:
         "og_image": photos[0],
         "micro_name": name.replace("'", "&#39;"),
         "micro_desc": clip(micro, 300).replace("'", "&#39;"),
+        "ld_desc": clip(plain_text(product.get("description")) or micro, 300),
         "spec_name": name,
         "spec_lines": specs["lines"],
         "lead": lead,
@@ -438,14 +446,57 @@ def build_values(product: dict, products: list[dict]) -> dict:
     }
 
 
-OFFER_TEMPLATE = ('<meta itemprop="offers" content=\'{"@type":"Offer","price":"%s"'
-                  ',"priceCurrency":"KGS","itemCondition":"https://schema.org/NewCondition"'
-                  ',"availability":"https://schema.org/InStock","areaServed":"KG"'
-                  ',"availableAtOrFrom":{"@type":"Place","address":{"@type":"PostalAddress"'
-                  ',"streetAddress":"ул. Васильева 55","addressLocality":"Бишкек","addressCountry":"KG"}}'
-                  ',"url":"%s"}\'/>')
+# Микроразметку предложения держим валидной: в шаблоне это вложенный
+# <div itemprop="offers" itemscope itemtype="Offer"> с <meta itemprop="price">,
+# а не JSON-строка в content (такой content поисковики не разбирают).
+TEMPLATE_OFFER_PRICE = '<meta itemprop="price" content="280"/>'
+TEMPLATE_OFFER_URL = f'<meta itemprop="url" content="{SITE}/{TEMPLATE_SLUG}.html"/>'
 
-TEMPLATE_OFFER = OFFER_TEMPLATE % ("280", f"{SITE}/{TEMPLATE_SLUG}")
+# Маркеры вокруг JSON-LD товара: сами комментарии не меняются, поэтому вставка
+# идемпотентна (повторный прогон даёт тот же результат даже для страницы-эталона).
+LD_START = "<!-- jnn:product-ld:start -->"
+LD_END = "<!-- jnn:product-ld:end -->"
+
+
+def product_ld_html(values: dict) -> str:
+    """JSON-LD @type Product — машинный дубль карточки для поисковиков и ИИ.
+
+    Данные берём из тех же значений, что и вёрстку (Directus — источник истины),
+    поэтому JSON-LD, микроразметка и видимая цена всегда совпадают.
+    """
+    photos = [p if p.startswith(("http://", "https://", "//")) else SITE + p
+              for p in values["photos"]]
+    offers = {
+        "@type": "Offer",
+        "url": f"{SITE}/{values['slug']}.html",
+        "priceCurrency": "KGS",
+        "availability": "https://schema.org/InStock",
+        "itemCondition": "https://schema.org/NewCondition",
+        "seller": {"@id": SITE + "/#organization"},
+    }
+    if values["price"]:
+        offers["price"] = values["price"]
+    data = {
+        "@context": "https://schema.org",
+        "@type": "Product",
+        "name": values["name"],
+        "sku": values["sku"],
+        "image": photos,
+        "description": values["ld_desc"],
+        "brand": {"@type": "Brand", "name": "JNN Factory"},
+        "offers": offers,
+    }
+    return ("\n<script type=\"application/ld+json\">\n"
+            + json.dumps(data, ensure_ascii=False, indent=2) + "\n</script>\n")
+
+
+def replace_between(text: str, start: str, end: str, block: str, label: str) -> str:
+    """Меняет всё между маркерами (сами маркеры остаются) — идемпотентная замена."""
+    first = text.find(start)
+    last = text.find(end, first + len(start)) if first >= 0 else -1
+    if first < 0 or last < 0:
+        raise PublishError(f"[{label}] не найдены маркеры {start!r} / {end!r}")
+    return text[:first + len(start)] + block + text[last:]
 
 
 def specs_html(values: dict) -> str:
@@ -506,7 +557,7 @@ def render(template: str, values: dict, product: dict, products: list[dict]) -> 
                '<meta content=\'Производим женские футболки "Летучка" оптом. Стильный свободный крой, '
                'ткань "пенье компакт". Идеально для повседневного стиля и маркетплейсов.\' name="description"/>',
                "<meta content='" + values["desc_meta"] + "' name=\"description\"/>", slug + ":description")
-    out = swap(out, f'<meta content="{SITE}/{TEMPLATE_SLUG}" property="og:url"/>',
+    out = swap(out, f'<meta content="{SITE}/{TEMPLATE_SLUG}.html" property="og:url"/>',
                f'<meta content="{link}" property="og:url"/>', slug + ":og:url")
     out = swap(out, '<meta content="Футболка Летучка" property="og:title"/>',
                '<meta content="' + values["og_title"].replace('"', "&quot;") + '" property="og:title"/>',
@@ -517,9 +568,9 @@ def render(template: str, values: dict, product: dict, products: list[dict]) -> 
                '<meta content="/assets/tildcdn/tild3231-6330-4135-b965-323533366339/504x/260A1229.jpg" '
                'property="og:image"/>',
                '<meta content="' + SITE + values["og_image"] + '" property="og:image"/>', slug + ":og:image")
-    out = swap(out, f'<link href="{SITE}/{TEMPLATE_SLUG}" rel="canonical"/>',
+    out = swap(out, f'<link href="{SITE}/{TEMPLATE_SLUG}.html" rel="canonical"/>',
                f'<link href="{link}" rel="canonical"/>', slug + ":canonical")
-    out = swap(out, '<meta content="nofollow" name="robots"/>',
+    out = swap(out, '<meta content="index, follow" name="robots"/>',
                '<meta content="' + ("noindex, follow" if draft else "index, follow") + '" name="robots"/>',
                slug + ":robots")
     out = swap(out, f'data-tilda-page-alias="{TEMPLATE_SLUG}" data-tilda-page-id="72600819"',
@@ -553,7 +604,10 @@ def render(template: str, values: dict, product: dict, products: list[dict]) -> 
                '<meta itemprop="description" content="' + values["micro_desc"] + '"/>', slug + ":micro-desc")
     out = swap(out, '<meta itemprop="sku" content="JNN-W-TS-001"/>',
                '<meta itemprop="sku" content="' + values["sku"] + '"/>', slug + ":sku")
-    out = swap(out, TEMPLATE_OFFER, OFFER_TEMPLATE % (values["price"], f"{SITE}/{slug}"), slug + ":offers")
+    out = swap(out, TEMPLATE_OFFER_PRICE,
+               '<meta itemprop="price" content="' + values["price"] + '"/>', slug + ":offer-price")
+    out = swap(out, TEMPLATE_OFFER_URL,
+               f'<meta itemprop="url" content="{link}"/>', slug + ":offer-url")
     out = swap(out, '<h1 class="t165__title t-heading t-heading_md" field="title">Футболка «Летучка»</h1>',
                '<h1 class="t165__title t-heading t-heading_md" field="title">' + escape(values["h1"]) + '</h1>',
                slug + ":h1")
@@ -571,6 +625,8 @@ def render(template: str, values: dict, product: dict, products: list[dict]) -> 
     out = swap_inner(out, 'textwrapper"> <div class="t165__text t-text t-text_sm" field="text">',
                      faq_html(values), slug + ":faq-text")
 
+    out = replace_between(out, LD_START, LD_END, product_ld_html(values), slug + ":product-ld")
+
     marker = (f"{MARKER_PREFIX} slug={slug} hash={content_hash(product)} generated={today()} "
               f"v={VERSION} -->")
     # Маркер ставим в самое начало файла: голова Tilda-страницы ~15 КБ, и читать
@@ -586,13 +642,33 @@ def render(template: str, values: dict, product: dict, products: list[dict]) -> 
 
 def check_page(out: str, values: dict, template: str) -> None:
     slug = values["slug"]
-    ld_start = out.find('<script type="application/ld+json">')
-    ld_end = out.find("</script>", ld_start) if ld_start >= 0 else -1
+    spans = []
+    for match in re.finditer(r'<script type="application/ld\+json">', out):
+        end = out.find("</script>", match.start())
+        if end < 0:
+            raise PublishError(f"[{slug}] блок JSON-LD не закрыт: нет </script>")
+        spans.append((match.start(), end))
     for match in re.finditer("[—–]", out):
-        if ld_start >= 0 and ld_start <= match.start() < ld_end:
+        if any(start <= match.start() < end for start, end in spans):
             continue
         raise PublishError(f"[{slug}] длинное тире вне JSON-LD: "
                            + repr(out[max(0, match.start() - 60):match.start() + 40]))
+    # JSON-LD товара между маркерами обязан быть валидным и полным
+    if LD_START not in out or LD_END not in out:
+        raise PublishError(f"[{slug}] нет маркеров JSON-LD товара")
+    block = out.split(LD_START, 1)[1].split(LD_END, 1)[0]
+    match = re.search(r'<script type="application/ld\+json">(.*?)</script>', block, re.S)
+    if not match:
+        raise PublishError(f"[{slug}] в блоке JSON-LD нет <script type=application/ld+json>")
+    try:
+        data = json.loads(match.group(1))
+    except ValueError as exc:
+        raise PublishError(f"[{slug}] JSON-LD товара не парсится: {exc}")
+    if data.get("@type") != "Product":
+        raise PublishError(f"[{slug}] JSON-LD товара: @type != Product")
+    for field in ("name", "sku", "image", "description", "offers"):
+        if not data.get(field):
+            raise PublishError(f"[{slug}] JSON-LD товара: пустое поле {field}")
     # не должно остаться ничего от эталона (фразы эталона с данными товара не совпадают;
     # исключение — если публикуем сам эталон, тогда его h1 законен)
     leftovers = [
@@ -737,11 +813,13 @@ def llms_catalog_upsert(root: str, values: dict, product: dict, refresh: bool = 
         if loc in line:
             old_index = index
             break
-    if old_index is not None and not refresh:
-        return "exists (строка уже есть — оставлена как есть)"
-    if old_index is not None:
-        del lines[old_index]
     line = catalog_line(values, product)
+    if old_index is not None:
+        # Строку обновляем, только если данные в Directus изменились: иначе цены
+        # и состав в llms.txt навсегда отстали бы от товара (sync без refresh).
+        if lines[old_index].strip() == line.strip() and not refresh:
+            return "actual (строка совпадает с Directus)"
+        del lines[old_index]
     if old_index is None:
         bounds = section_bounds("\n".join(lines), heading)
         if not bounds:
@@ -799,13 +877,15 @@ def llms_full_upsert(root: str, values: dict, product: dict, refresh: bool = Fal
             except ValueError:
                 number = 0
             break
-    if old_index is not None and not refresh:
-        return "exists (строка уже есть — оставлена как есть)"
-    if old_index is not None:
-        del lines[old_index]
     if not number:
-        number = section_count("\n".join(lines), heading, "| ") + 1
+        probe = [text for index, text in enumerate(lines) if index != old_index]
+        number = section_count("\n".join(probe), heading, "| ") + 1
     row = table_row(values, product, number)
+    if old_index is not None:
+        # Как и в llms.txt: обновляем строку, если она разошлась с Directus.
+        if lines[old_index].strip() == row.strip() and not refresh:
+            return "actual (строка совпадает с Directus)"
+        del lines[old_index]
     if old_index is not None:
         lines.insert(old_index, row)
     else:
@@ -884,7 +964,7 @@ def publish_product(product: dict, products: list[dict], force: bool = False, dr
     draft = not bool(product.get("show_in_catalog"))
     path = os.path.join(root, slug + ".html")
     values = build_values(product, products)
-    template = read_text(os.path.join(SITE_ROOT, TEMPLATE_NAME))
+    template = read_text(os.path.join(SITE_ROOT, TEMPLATE_DIR, TEMPLATE_NAME))
     html = render(template, values, product, products)
 
     exists = os.path.exists(path)
@@ -955,8 +1035,11 @@ def sync(dry: bool = False, force: bool = False, root: str | None = None,
         path = os.path.join(root, slug + ".html")
         if os.path.exists(path):
             marker = marker_of(read_head(path))
-            if not marker:
-                results.append({"slug": slug, "action": "skip", "reason": "страница создана вручную"})
+            # force нужен, чтобы забрать страницу под управление публикатора:
+            # без него ручные страницы не трогаем (иначе перезапишем чужую вёрстку).
+            if not marker and not force:
+                results.append({"slug": slug, "action": "skip",
+                                "reason": "страница создана вручную (нет маркера jnn:publish) — нужен force"})
                 continue
             if marker.get("hash") == content_hash(product) and not force:
                 results.append({"slug": slug, "action": "skip", "reason": "актуальна"})

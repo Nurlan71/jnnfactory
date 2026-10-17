@@ -34,7 +34,8 @@ async def get_content():
     return {}
 
 @app.post("/api/content")
-async def update_content(payload: dict):
+async def update_content(payload: dict, x_gallery_key: str = Header(default="")):
+    _check_key(x_gallery_key)  # этап 2: запись только с ключом (как у gallery-маршрутов)
     with open(DATA_FILE, "w", encoding="utf-8") as f:
         json.dump(payload, f, ensure_ascii=False, indent=2)
     
@@ -61,7 +62,8 @@ async def update_content(payload: dict):
     return {"status": "success"}
 
 @app.post("/api/upload")
-async def upload_asset(file: UploadFile = File(...)):
+async def upload_asset(file: UploadFile = File(...), x_gallery_key: str = Header(default="")):
+    _check_key(x_gallery_key)  # этап 2: загрузка файлов только с ключом
     ext = os.path.splitext(file.filename)[1].lower()
     allowed = (".jpg", ".jpeg", ".png", ".webp")
     if ext not in allowed:
@@ -91,7 +93,8 @@ async def edit_file():
     return {"status":"edit endpoint active"}
 
 @app.post("/edit")
-async def edit_post():
+async def edit_post(x_gallery_key: str = Header(default="")):
+    _check_key(x_gallery_key)  # этап 2: задел на будущее
     return {"status":"edit saved"}
 
 @app.get("/settings")
@@ -103,7 +106,8 @@ async def get_settings():
         return json.load(f)
 
 @app.post("/settings")
-async def post_settings():
+async def post_settings(x_gallery_key: str = Header(default="")):
+    _check_key(x_gallery_key)  # этап 2: задел на будущее
     path = "/var/www/jnnfactory/admin/settings.json"
     data = {}
     return {"status":"saved"}
@@ -121,7 +125,8 @@ async def get_catalog():
     return []
 
 @app.post("/api/catalog")
-async def update_catalog(payload: dict):
+async def update_catalog(payload: dict, x_gallery_key: str = Header(default="")):
+    _check_key(x_gallery_key)  # этап 2: запись каталога только с ключом
     if os.path.exists(DATA_FILE):
         with open(DATA_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
