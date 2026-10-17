@@ -5,10 +5,11 @@
     POST /api/chat/lead     — контакт клиента: лог + уведомление в Telegram
     GET  /api/chat/health   — состояние: провайдеры, размер контекста, число лидов
 
-Провайдеры по порядку (первый доступный):
-    1. Gemini (GEMINI_API_KEY) — если на счёте есть кредиты;
-    2. Groq  (GROQ_API_KEY)    — быстрые модели, работают сейчас;
-    3. Ответ по правилам из базы знаний — если внешние API недоступны.
+Провайдеры по порядку (первый доступный, порядок меняется в JNN_CHAT_ORDER):
+    1. OpenRouter — карусель бесплатных моделей (gemma → nemotron → резервы);
+    2. Gemini (GEMINI_API_KEY) — если на счёте есть кредиты;
+    3. Groq  (GROQ_API_KEY)    — быстрые модели;
+    4. Ответ по правилам из базы знаний — если внешние API недоступны.
 
 База знаний — компактный admin/chat-facts.md (выжимка из llms-full.txt):
 правила фабрики (склад от 50 шт, пошив и СТМ от 500 шт, M&R до 12 цветов,
@@ -47,12 +48,39 @@ LEADS_FILE = os.environ.get("JNN_CHAT_LEADS") or "/var/lib/jnn-chat/leads.jsonl"
 
 GEMINI_KEY = (os.environ.get("GEMINI_API_KEY") or "").strip()
 GROQ_KEY = (os.environ.get("GROQ_API_KEY") or "").strip()
+OPENROUTER_KEY = (os.environ.get("OPENROUTER_API_KEY") or "").strip()
 TELEGRAM_TOKEN = (os.environ.get("TELEGRAM_BOT_TOKEN") or "").strip()
 TELEGRAM_CHAT = (os.environ.get("TELEGRAM_CHAT_ID") or "").strip()
 
 GEMINI_MODELS = ("gemini-flash-latest", "gemini-3.5-flash-lite", "gemini-2.5-flash")
 # У каждой модели Groq свой лимит токенов в минуту, поэтому в цепочке их несколько.
 GROQ_MODELS = ("openai/gpt-oss-120b", "openai/gpt-oss-20b", "qwen/qwen3.8-27b")
+
+OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+OPENROUTER_HEADERS = {
+    "HTTP-Referer": "https://jnnfactory.online",
+    "X-Title": "JNN Factory AI Assistant",
+}
+# Револьверная карусель бесплатных моделей: приоритет задан владельцем сайта,
+# в хвосте — проверенные резервы из того же бесплатного каталога OpenRouter.
+OPENROUTER_MODELS = (
+    "google/gemma-4-31b-it:free",
+    "google/gemma-4-26b-a4b-it:free",
+    "nvidia/nemotron-3-super-120b-a12b:free",
+    "xingchen-agi/xing4.0-29b-a4b:free",
+    "liquid/lfm-2.5-2.6b:free",
+    "cohere/north-mini-code:free",
+)
+# Почти все бесплатные модели — reasoning: при 600 токенах ответ не успевает начаться
+# (бюджет уходит в скрытые размышления), поэтому просим с запасом, а сам ответ
+# остаётся коротким за счёт правил в системном промпте.
+OPENROUTER_MAX_OUTPUT = 1600
+OPENROUTER_TIMEOUT = 25
+OPENROUTER_COOLDOWN_SEC = 60
+OPENROUTER_PROVIDER_COOLDOWN_SEC = 900
+# Общий бюджет карусели на один вопрос, чтобы клиент не ждал бесконечно.
+OPENROUTER_DEADLINE_SEC = 32
+
 TEMPERATURE = 0.3
 MAX_OUTPUT_TOKENS = 600
 HTTP_TIMEOUT = 40
@@ -60,6 +88,9 @@ HTTP_TIMEOUT = 40
 USER_AGENT = "JNNFactoryChat/1.0 (+https://jnnfactory.online)"
 # Сколько последних реплик диалога отправляем в модель (экономия лимита токенов).
 HISTORY_TURNS = 6
+# Порядок провайдеров. Меняется одной строкой в .chat.env, например
+# JNN_CHAT_ORDER=groq,openrouter,gemini,rules — быстрее, но лимит Groq ниже.
+CHAT_ORDER = (os.environ.get("JNN_CHAT_ORDER") or "openrouter,gemini,groq,rules").strip().lower()
 
 # Ограничения, чтобы ключ не выжгли: на IP и общий суточный.
 RATE_PER_IP = int(os.environ.get("JNN_CHAT_RATE_PER_IP", "15"))
@@ -71,6 +102,17 @@ RATE_PER_DAY = int(os.environ.get("JNN_CHAT_RATE_PER_DAY", "1200"))
 _gemini_cooldown_until = 0.0
 _groq_cooldown: Dict[str, float] = {}
 GROQ_COOLDOWN_SEC = 20
+# Карусель OpenRouter: у каждой бесплатной модели свой лимит и своё «здоровье»,
+# поэтому остывание считаем по модели, а полный отказ ключа — отдельно.
+_openrouter_cooldown: Dict[str, float] = {}
+_openrouter_key_cooldown_until = 0.0
+# Ошибки, при которых модель стоит временно исключить из карусели.
+OPENROUTER_RETRY_CODES = (429, 500, 502, 503, 504)
+# Признаки того, что модель вывалила в ответ свои размышления вместо ответа.
+REASONING_MARKERS = (
+    "analyze the request", "анализ запроса", "мыслительный процесс",
+    "**analyze", "thinking process", "let me think", "рассуждаю вслух",
+)
 _model_lock = threading.Lock()
 _rate_lock = threading.Lock()
 _ip_hits: Dict[str, deque] = defaultdict(deque)
@@ -102,11 +144,20 @@ SYSTEM_RULES = """
 9. Вопрос из нескольких частей — отвечай по каждой: сначала факты из базы знаний,
    и только то, чего в базе нет, оставляй менеджеру. Не отправляй к менеджеру
    за тем, что в базе есть (тиражи, сроки, цены, ткани, печать, карго, маркировка).
+10. Если клиент называет тираж меньше минимального (например, 300 шт на пошив),
+   скажи прямо: пошив под заказ и СТМ — от 500 шт; на меньший объём предложи
+   готовые модели со склада (от 50 шт, 1–3 дня) или объединение партии.
 """.strip()
 
 CONTACT_ASK = (
     "Чтобы прислать точный расчёт, оставьте, пожалуйста, номер WhatsApp или телефона — "
     "менеджер напишет в рабочее время (пн–пт, 09:00–18:00, GMT+6)."
+)
+
+# Напоминание о минимальных тиражах — добавляется, если клиент просит меньше 500 шт.
+MIN_LOT_REMINDER = (
+    "Напомню по минимальным тиражам: готовые модели со склада отгружаем от 50 шт (1–3 дня), "
+    "пошив под заказ и СТМ — партия от 500 шт."
 )
 
 # Ответы по правилам — если внешние API недоступны. Факты ровно из llms-full.txt.
@@ -317,6 +368,107 @@ def _groq_reply(system: str, messages: List[Dict[str, str]]) -> Optional[str]:
     return None
 
 
+def _openrouter_reply(system: str, messages: List[Dict[str, str]]) -> Optional[str]:
+    """Карусель бесплатных моделей OpenRouter: перебираем по приоритету."""
+    global _openrouter_key_cooldown_until
+    if not OPENROUTER_KEY:
+        return None
+    now = time.time()
+    if now < _openrouter_key_cooldown_until:
+        return None
+
+    deadline = now + OPENROUTER_DEADLINE_SEC
+    payload = {
+        "temperature": TEMPERATURE,
+        "max_tokens": OPENROUTER_MAX_OUTPUT,
+        "messages": [{"role": "system", "content": system}] + messages,
+    }
+    headers = {
+        "Authorization": f"Bearer {OPENROUTER_KEY}",
+    }
+    headers.update(OPENROUTER_HEADERS)
+
+    for model in OPENROUTER_MODELS:
+        now = time.time()
+        if now > deadline:
+            print("[chat] OpenRouter: исчерпан бюджет времени карусели", flush=True)
+            break
+        if _openrouter_cooldown.get(model, 0.0) > now:
+            continue
+        payload["model"] = model
+        try:
+            data = _post_json(OPENROUTER_URL, payload, headers, timeout=OPENROUTER_TIMEOUT)
+        except urllib.error.HTTPError as exc:
+            detail = ""
+            try:
+                detail = exc.read().decode("utf-8", "replace")
+            except Exception:
+                pass
+            print(f"[chat] OpenRouter {model}: HTTP {exc.code} {detail[:200]}", flush=True)
+            low = detail.lower()
+            if exc.code in (401, 403) and "harness" not in low:
+                # Ключ не принят — не тратим время на остальные модели.
+                with _model_lock:
+                    _openrouter_key_cooldown_until = time.time() + OPENROUTER_PROVIDER_COOLDOWN_SEC
+                return None
+            if exc.code in OPENROUTER_RETRY_CODES:
+                # Лимит на минуту — короткая пауза; суточный лимит модели — длинная.
+                pause = 3600 if ("per-day" in low or "per day" in low or "daily" in low) \
+                    else OPENROUTER_COOLDOWN_SEC
+                with _model_lock:
+                    _openrouter_cooldown[model] = time.time() + pause
+                continue
+            if exc.code in (400, 404):
+                with _model_lock:
+                    _openrouter_cooldown[model] = time.time() + 3600
+                continue
+            continue
+        except Exception as exc:  # noqa: BLE001 — сеть, таймауты
+            print(f"[chat] OpenRouter {model}: {type(exc).__name__}: {exc}", flush=True)
+            with _model_lock:
+                _openrouter_cooldown[model] = time.time() + OPENROUTER_COOLDOWN_SEC
+            continue
+        try:
+            text = (data["choices"][0]["message"].get("content") or "").strip()
+        except Exception:
+            print(f"[chat] OpenRouter {model}: пустой ответ", flush=True)
+            continue
+        low = text.lower()
+        if len(text) < 40 or any(marker in low for marker in REASONING_MARKERS):
+            # Модель отдала размышления или обрывок — считаем попытку неудачной.
+            print(f"[chat] OpenRouter {model}: ответ не пригоден ({len(text)} симв.)", flush=True)
+            with _model_lock:
+                _openrouter_cooldown[model] = time.time() + 600
+            continue
+        with _model_lock:
+            _openrouter_cooldown.pop(model, None)
+        print(f"[chat] OpenRouter {model}: ответ {len(text)} симв.", flush=True)
+        return text
+    return None
+
+
+def _ask_llm(system: str, messages: List[Dict[str, str]], message: str) -> Tuple[str, str]:
+    """Провайдеры в порядке из JNN_CHAT_ORDER; последний рубеж — ответ по правилам."""
+    providers = {
+        "openrouter": ("openrouter", _openrouter_reply),
+        "gemini": ("gemini", _gemini_reply),
+        "groq": ("groq", _groq_reply),
+    }
+    for name in CHAT_ORDER.split(","):
+        name = name.strip()
+        if name == "rules" or name not in providers:
+            continue
+        label, runner = providers[name]
+        try:
+            reply = runner(system, messages)
+        except Exception as exc:  # noqa: BLE001 — сбой провайдера не должен ломать чат
+            print(f"[chat] {label}: {type(exc).__name__}: {exc}", flush=True)
+            reply = None
+        if reply:
+            return reply, label
+    return rules_reply(message), "rules"
+
+
 def rules_reply(message: str) -> str:
     """Ответ по правилам базы знаний, когда модели недоступны."""
     text = (message or "").lower()
@@ -327,6 +479,28 @@ def rules_reply(message: str) -> str:
         "Точный ответ по вашей партии даст менеджер: +996 700 712 212 (WhatsApp, Telegram). "
         "Готовые модели со склада отгружаем от 50 шт, пошив под заказ и СТМ — от 500 шт."
     )
+
+
+# Признак того, что речь о пошиве/моделях (тогда цифра — это тираж, а не цена).
+_LOT_TOPIC_RE = re.compile(
+    r"пошив|отшить|заказ|тираж|парти|стм|private\s*label|худи|футболк|лонгслив|"
+    r"свитшот|брюк|костюм|издел",
+    re.I,
+)
+# Цифра сразу перед единицей валюты — это цена, а не количество.
+_PRICE_AFTER_RE = re.compile(r"^\s*(сом|сомов|руб|рубл|тенге|тг|\$|доллар|usd|eur|евро)", re.I)
+
+
+def _undersized_lot(message: str) -> bool:
+    """Просит ли клиент тираж меньше минимального (для страховки об ограничении 500 шт)."""
+    text = message or ""
+    if not _LOT_TOPIC_RE.search(text):
+        return False
+    for match in re.finditer(r"\b(\d{1,4})\b", text):
+        value = int(match.group(1))
+        if 0 < value < 500 and not _PRICE_AFTER_RE.match(text[match.end():]):
+            return True
+    return False
 
 
 def wants_contact(message: str, user_turns: int) -> bool:
@@ -431,12 +605,23 @@ def chat_health() -> dict:
     system = system_prompt()
     now = time.time()
     groq_ready = [m for m in GROQ_MODELS if _groq_cooldown.get(m, 0.0) <= now]
+    openrouter_ready = [m for m in OPENROUTER_MODELS if _openrouter_cooldown.get(m, 0.0) <= now]
     return {
         "ok": True,
+        "order": CHAT_ORDER,
         "providers": {
+            "openrouter": bool(OPENROUTER_KEY)
+            and bool(openrouter_ready)
+            and now >= _openrouter_key_cooldown_until,
             "gemini": bool(GEMINI_KEY) and now >= _gemini_cooldown_until,
             "groq": bool(GROQ_KEY) and bool(groq_ready),
             "rules": True,
+        },
+        "openrouter_ready_models": openrouter_ready,
+        "openrouter_cooldowns": {
+            m: max(0, int(until - now))
+            for m, until in _openrouter_cooldown.items()
+            if until > now
         },
         "gemini_cooldown_sec": max(0, int(_gemini_cooldown_until - now)),
         "groq_ready_models": groq_ready,
@@ -472,14 +657,12 @@ def chat_reply(payload: ChatRequest, request: Request) -> JSONResponse:
 
     system = system_prompt()
     messages = history + [{"role": "user", "content": message}]
-    reply = _gemini_reply(system, messages)
-    provider = "gemini" if reply else ""
-    if not reply:
-        reply = _groq_reply(system, messages)
-        provider = "groq" if reply else ""
-    if not reply:
-        reply = rules_reply(message)
-        provider = "rules"
+    reply, provider = _ask_llm(system, messages, message)
+
+    # Страховка: если клиент просит тираж меньше минимального, ответ обязан
+    # назвать оба минимума — иначе модель «забывает» про правило 500/50.
+    if _undersized_lot(message) and "500" not in reply:
+        reply = f"{reply}\n\n{MIN_LOT_REMINDER}".strip()
 
     if ask_contact and "оставьте" not in reply.lower() and "контакт" not in reply.lower():
         reply = f"{reply}\n\n{CONTACT_ASK}"
