@@ -75,11 +75,16 @@ OPENROUTER_MODELS = (
 # (бюджет уходит в скрытые размышления), поэтому просим с запасом, а сам ответ
 # остаётся коротким за счёт правил в системном промпте.
 OPENROUTER_MAX_OUTPUT = 1600
-OPENROUTER_TIMEOUT = 25
+OPENROUTER_TIMEOUT = 20
+# Таймаут urllib не является жёстким дедлайном (медленный ответ может тянуться
+# минуты), поэтому каждый вызов к модели дополнительно ограничиваем потоком.
+GROQ_TIMEOUT = 12
+# Общий бюджет на цепочку моделей Groq: ответ обычно ~1 секунда, ждать дольше смысла нет.
+GROQ_DEADLINE_SEC = 15
 OPENROUTER_COOLDOWN_SEC = 60
 OPENROUTER_PROVIDER_COOLDOWN_SEC = 900
 # Общий бюджет карусели на один вопрос, чтобы клиент не ждал бесконечно.
-OPENROUTER_DEADLINE_SEC = 32
+OPENROUTER_DEADLINE_SEC = 20
 
 TEMPERATURE = 0.3
 MAX_OUTPUT_TOKENS = 600
@@ -260,6 +265,30 @@ def _post_json(url: str, payload: dict, headers: Dict[str, str], timeout: int = 
         return json.loads(resp.read().decode("utf-8", "replace"))
 
 
+def _post_json_bounded(call, seconds: float) -> Optional[dict]:
+    """Вызов модели с жёстким дедлайном: не ответил вовремя — идём к следующему.
+
+    Стандартный socket-таймаут urllib не спасает: если сервер отдаёт ответ
+    медленно, запрос может висеть минутами. Поэтому держим бюджет на поток.
+    """
+    box: Dict[str, Any] = {}
+
+    def run() -> None:
+        try:
+            box["value"] = call()
+        except Exception as exc:  # noqa: BLE001 — ошибку разберём в вызывающем коде
+            box["error"] = exc
+
+    thread = threading.Thread(target=run, daemon=True)
+    thread.start()
+    thread.join(seconds)
+    if thread.is_alive():
+        return None
+    if "error" in box:
+        raise box["error"]
+    return box.get("value")
+
+
 def _gemini_reply(system: str, messages: List[Dict[str, str]]) -> Optional[str]:
     global _gemini_cooldown_until
     if not GEMINI_KEY or time.time() < _gemini_cooldown_until:
@@ -321,6 +350,7 @@ def _gemini_reply(system: str, messages: List[Dict[str, str]]) -> Optional[str]:
 def _groq_reply(system: str, messages: List[Dict[str, str]]) -> Optional[str]:
     if not GROQ_KEY:
         return None
+    deadline = time.time() + GROQ_DEADLINE_SEC
     payload = {
         "temperature": TEMPERATURE,
         "max_tokens": MAX_OUTPUT_TOKENS,
@@ -328,6 +358,9 @@ def _groq_reply(system: str, messages: List[Dict[str, str]]) -> Optional[str]:
     }
     for model in GROQ_MODELS:
         now = time.time()
+        if now > deadline:
+            print("[chat] Groq: исчерпан бюджет времени", flush=True)
+            break
         if _groq_cooldown.get(model, 0.0) > now:
             continue  # модель недавно отдала 429 — не тратим на неё время
         payload["model"] = model
@@ -338,10 +371,14 @@ def _groq_reply(system: str, messages: List[Dict[str, str]]) -> Optional[str]:
         else:
             payload.pop("reasoning_effort", None)
         try:
-            data = _post_json(
-                "https://api.groq.com/openai/v1/chat/completions",
-                payload,
-                {"Authorization": f"Bearer {GROQ_KEY}"},
+            data = _post_json_bounded(
+                lambda body=dict(payload): _post_json(
+                    "https://api.groq.com/openai/v1/chat/completions",
+                    body,
+                    {"Authorization": f"Bearer {GROQ_KEY}"},
+                    timeout=GROQ_TIMEOUT,
+                ),
+                GROQ_TIMEOUT + 1,
             )
         except urllib.error.HTTPError as exc:
             detail = ""
@@ -356,6 +393,9 @@ def _groq_reply(system: str, messages: List[Dict[str, str]]) -> Optional[str]:
             continue
         except Exception as exc:  # noqa: BLE001
             print(f"[chat] Groq {model}: {exc}", flush=True)
+            continue
+        if data is None:
+            print(f"[chat] Groq {model}: превышен бюджет {GROQ_TIMEOUT} с", flush=True)
             continue
         try:
             text = data["choices"][0]["message"]["content"]
@@ -397,7 +437,12 @@ def _openrouter_reply(system: str, messages: List[Dict[str, str]]) -> Optional[s
             continue
         payload["model"] = model
         try:
-            data = _post_json(OPENROUTER_URL, payload, headers, timeout=OPENROUTER_TIMEOUT)
+            data = _post_json_bounded(
+                lambda body=dict(payload), head=dict(headers): _post_json(
+                    OPENROUTER_URL, body, head, timeout=OPENROUTER_TIMEOUT
+                ),
+                OPENROUTER_TIMEOUT + 1,
+            )
         except urllib.error.HTTPError as exc:
             detail = ""
             try:
@@ -427,6 +472,9 @@ def _openrouter_reply(system: str, messages: List[Dict[str, str]]) -> Optional[s
             print(f"[chat] OpenRouter {model}: {type(exc).__name__}: {exc}", flush=True)
             with _model_lock:
                 _openrouter_cooldown[model] = time.time() + OPENROUTER_COOLDOWN_SEC
+            continue
+        if data is None:
+            print(f"[chat] OpenRouter {model}: превышен бюджет {OPENROUTER_TIMEOUT} с", flush=True)
             continue
         try:
             text = (data["choices"][0]["message"].get("content") or "").strip()
