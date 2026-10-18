@@ -15,8 +15,9 @@
 правила фабрики (склад от 50 шт, пошив и СТМ от 500 шт, M&R до 12 цветов,
 футер 340 г/м², ОсОО «Айдана Стайл», карго 5–12 дней и т. д.). Температура 0.3.
 
-Лиды пишутся в /var/lib/jnn-chat/leads.jsonl (вне корня сайта) и, если заданы
-TELEGRAM_BOT_TOKEN и TELEGRAM_CHAT_ID, уходят уведомлением в Telegram.
+Лиды пишутся в /var/lib/jnn-chat/leads.jsonl (вне корня сайта) и уходят уведомлением
+в Telegram: личный чат (TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID) и, если задан
+TELEGRAM_CHAT_ID_GROUP, дубль в группу CRM. Получатели обрабатываются независимо.
 """
 
 from __future__ import annotations
@@ -51,6 +52,10 @@ GROQ_KEY = (os.environ.get("GROQ_API_KEY") or "").strip()
 OPENROUTER_KEY = (os.environ.get("OPENROUTER_API_KEY") or "").strip()
 TELEGRAM_TOKEN = (os.environ.get("TELEGRAM_BOT_TOKEN") or "").strip()
 TELEGRAM_CHAT = (os.environ.get("TELEGRAM_CHAT_ID") or "").strip()
+# Дубль лида в группу CRM: id супергруппы вида -100…; пусто — дублирование выключено.
+TELEGRAM_CHAT_GROUP = (os.environ.get("TELEGRAM_CHAT_ID_GROUP") or "").strip()
+# Таймаут на одного получателя: держим коротким, чтобы сбой Telegram не тормозил ответ сайта.
+TELEGRAM_TIMEOUT = 6
 
 GEMINI_MODELS = ("gemini-flash-latest", "gemini-3.5-flash-lite", "gemini-2.5-flash")
 # У каждой модели Groq свой лимит токенов в минуту, поэтому в цепочке их несколько.
@@ -597,20 +602,31 @@ def save_lead(lead: Dict[str, Any]) -> bool:
         return False
 
 
-def notify_telegram(text: str) -> bool:
-    if not TELEGRAM_TOKEN or not TELEGRAM_CHAT:
+def _tg_send(chat_id: str, text: str) -> bool:
+    """Отправка одному получателю: своя обработка ошибок, сбой не влияет на других."""
+    if not TELEGRAM_TOKEN or not chat_id:
         return False
     try:
         _post_json(
             f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage",
-            {"chat_id": TELEGRAM_CHAT, "text": text, "disable_web_page_preview": True},
+            {"chat_id": chat_id, "text": text, "disable_web_page_preview": True},
             {},
-            timeout=15,
+            timeout=TELEGRAM_TIMEOUT,
         )
         return True
     except Exception as exc:  # noqa: BLE001
-        print(f"[chat] Telegram: {exc}", flush=True)
+        print(f"[chat] Telegram ({chat_id}): {exc}", flush=True)
         return False
+
+
+def notify_telegram(text: str) -> bool:
+    """Личное уведомление владельцу (прежнее поведение)."""
+    return _tg_send(TELEGRAM_CHAT, text)
+
+
+def notify_telegram_group(text: str) -> bool:
+    """Дубль лида в группу CRM «СРМ - JNN»; пустая переменная — просто не отправляем."""
+    return _tg_send(TELEGRAM_CHAT_GROUP, text)
 
 
 def count_leads() -> int:
@@ -676,6 +692,7 @@ def chat_health() -> dict:
         "context_chars": len(system),
         "leads": count_leads(),
         "telegram": bool(TELEGRAM_TOKEN and TELEGRAM_CHAT),
+        "telegram_group": bool(TELEGRAM_TOKEN and TELEGRAM_CHAT_GROUP),
     }
 
 
@@ -751,5 +768,6 @@ def chat_lead(payload: LeadRequest, request: Request) -> JSONResponse:
         if last_user:
             text += f"\nПоследний вопрос: {last_user[0][:200]}"
     telegram = notify_telegram(text)
+    telegram_group = notify_telegram_group(text)
 
-    return JSONResponse({"ok": saved, "telegram": telegram})
+    return JSONResponse({"ok": saved, "telegram": telegram, "telegram_group": telegram_group})
