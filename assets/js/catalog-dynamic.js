@@ -117,6 +117,23 @@
     var templateCard = grid.querySelector('.cat-card');
     if (!templateCard) return;
 
+    // Пока идёт запрос к Directus, снимаем src у фото статической вёрстки:
+    // иначе браузер начинает качать их, а потом витрина заменяется — фото
+    // скачивается дважды (и статикой, и из галереи товара). Плейсхолдер
+    // (высота задана через aspect-ratio) сохраняется, прыжков вёрстки нет.
+    grid.querySelectorAll('.cat-img img').forEach(function (img) {
+      var src = img.getAttribute('src');
+      if (src) {
+        img.setAttribute('data-fallback-src', src);
+        img.removeAttribute('src');
+      }
+    });
+    function restoreStatic() {
+      grid.querySelectorAll('.cat-img img[data-fallback-src]').forEach(function (img) {
+        img.src = img.getAttribute('data-fallback-src');
+      });
+    }
+
     try {
       var products = await loadProducts();
       if (!products) throw new Error('API недоступен');
@@ -131,6 +148,7 @@
 
       if (!products.length) {
         console.log('JNN Catalog: нет товаров в Directus, оставляю статику');
+        restoreStatic();
         return;
       }
 
@@ -199,6 +217,7 @@
           if (!firstImg) firstImg = getFirstImage(p.gallery_urls);
           img.src = firstImg || PLACEHOLDER;
           img.alt = p.name || '';
+          img.removeAttribute('data-fallback-src');
         }
 
         // Кликабельны: фото, название (H3) и кнопка «Подробнее»
@@ -230,6 +249,7 @@
 
       console.log('JNN Catalog: отрисовано ' + products.length + ' товаров из Directus');
     } catch (err) {
+      restoreStatic();
       console.warn('JNN Catalog: Directus недоступен, оставляю статику (' + err.message + ')');
     }
   }
