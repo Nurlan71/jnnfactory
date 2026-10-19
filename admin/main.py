@@ -1,6 +1,7 @@
-import datetime, json, os, re, shutil, uuid
+import datetime, hashlib, json, os, re, shutil, urllib.request, uuid
 from typing import List, Optional
 from fastapi import FastAPI, UploadFile, File, Header, HTTPException, Body, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -147,6 +148,12 @@ GALLERY_EXTS = {".jpg", ".jpeg", ".jfif", ".png", ".webp", ".avif", ".gif", ".sv
 GALLERY_MAX_FILE = 50 * 1024 * 1024  # 50 МБ на файл
 GALLERY_HTML = os.path.join(os.path.dirname(ASSETS_DIR), "gallery.html")
 
+# Медиатека Directus: фото, загруженные через админку. Только чтение, без секретов:
+# список берётся из публичного /files (localhost), хэши — из storage-файлов.
+DIRECTUS_API = os.environ.get("JNN_DIRECTUS_API", "http://127.0.0.1:8055")
+DIRECTUS_UPLOADS = os.environ.get("JNN_DIRECTUS_UPLOADS", "/opt/directus/uploads")
+_HASH_CACHE = {}  # путь -> (размер, mtime, sha256)
+
 
 def _gallery_key() -> str:
     key = (os.environ.get("JNN_GALLERY_KEY") or "").strip()
@@ -183,24 +190,131 @@ def _safe_name(name: str) -> str:
     return name.lstrip(".")
 
 
+def _sha256(path: str) -> str:
+    """sha256 файла с кэшем по (путь, размер, mtime), чтобы не хэшировать всё на каждый запрос."""
+    try:
+        st = os.stat(path)
+    except OSError:
+        return ""
+    cached = _HASH_CACHE.get(path)
+    if cached and cached[0] == st.st_size and cached[1] == int(st.st_mtime):
+        return cached[2]
+    h = hashlib.sha256()
+    try:
+        with open(path, "rb") as fh:
+            for chunk in iter(lambda: fh.read(1 << 20), b""):
+                h.update(chunk)
+    except OSError:
+        return ""
+    digest = h.hexdigest()
+    _HASH_CACHE[path] = (st.st_size, int(st.st_mtime), digest)
+    return digest
+
+
+def _uploaded_ms(value) -> int:
+    """uploaded_on из Directus (ISO, обычно UTC) -> миллисекунды."""
+    if not value:
+        return 0
+    if isinstance(value, (int, float)):
+        return int(value)
+    try:
+        s = str(value).strip().replace("Z", "+00:00")
+        dt = datetime.datetime.fromisoformat(s)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=datetime.timezone.utc)
+        return int(dt.timestamp() * 1000)
+    except Exception:
+        return 0
+
+
+def _directus_images(limit: int = 1000):
+    """Изображения из медиатеки Directus. None — если Directus недоступен."""
+    url = (
+        DIRECTUS_API
+        + "/files?limit=" + str(limit)
+        + "&sort=-uploaded_on&fields=id,filename_download,filesize,type,filename_disk,uploaded_on"
+    )
+    try:
+        with urllib.request.urlopen(url, timeout=8) as resp:
+            data = json.load(resp)
+    except Exception:
+        return None
+    out = []
+    for f in data.get("data", []):
+        mime = (f.get("type") or "").lower()
+        if not mime.startswith("image/"):
+            continue
+        disk = f.get("filename_disk") or ""
+        path = os.path.join(DIRECTUS_UPLOADS, disk) if disk else ""
+        out.append({
+            "id": f.get("id") or "",
+            "name": f.get("filename_download") or (f.get("id") or ""),
+            "size": f.get("filesize") or 0,
+            "mtime": _uploaded_ms(f.get("uploaded_on")),
+            "url": "/assets/" + (f.get("id") or ""),
+            "hash": _sha256(path) if path else "",
+        })
+    return out
+
+
 @app.get("/gallery-api/list")
 async def gallery_list():
-    items = []
-    if os.path.isdir(ASSETS_DIR):
-        for f in sorted(os.listdir(ASSETS_DIR)):
-            p = os.path.join(ASSETS_DIR, f)
-            if not os.path.isfile(p):
+    def build():
+        items = []
+        disk_by_hash = {}
+        if os.path.isdir(ASSETS_DIR):
+            for f in sorted(os.listdir(ASSETS_DIR)):
+                p = os.path.join(ASSETS_DIR, f)
+                if not os.path.isfile(p):
+                    continue
+                if os.path.splitext(f)[1].lower() not in GALLERY_EXTS:
+                    continue
+                st = os.stat(p)
+                h = _sha256(p)
+                item = {
+                    "name": f,
+                    "size": st.st_size,
+                    "mtime": int(st.st_mtime * 1000),
+                    "url": "/assets/" + f,
+                    "source": "disk",
+                }
+                items.append(item)
+                if h:
+                    disk_by_hash.setdefault(h, item)
+        raw = _directus_images()
+        media = []
+        media_by_hash = {}
+        for d in raw or []:
+            if d["hash"] and d["hash"] in disk_by_hash:
+                # та же фотография уже есть на диске: одна карточка, помечаем копию в медиатеке
+                twin = disk_by_hash[d["hash"]]
+                twin["in_media"] = True
+                twin["media_id"] = d["id"]
                 continue
-            if os.path.splitext(f)[1].lower() not in GALLERY_EXTS:
+            if d["hash"] and d["hash"] in media_by_hash:
+                kept = media_by_hash[d["hash"]]
+                kept["dup"] = kept.get("dup", 0) + 1
                 continue
-            st = os.stat(p)
-            items.append({
-                "name": f,
-                "size": st.st_size,
-                "mtime": int(st.st_mtime * 1000),
-                "url": "/assets/" + f,
-            })
-    return {"count": len(items), "files": items}
+            item = {
+                "id": d["id"],
+                "name": d["name"],
+                "size": d["size"],
+                "mtime": d["mtime"],
+                "url": d["url"],
+                "source": "directus",
+            }
+            if d["hash"]:
+                media_by_hash[d["hash"]] = item
+            media.append(item)
+        return {
+            "count": len(items),
+            "files": items,
+            "directus": media,
+            "media_ok": raw is not None,
+            "total": len(items) + len(media),
+        }
+
+    return await run_in_threadpool(build)
 
 
 @app.get("/gallery-api/key")
@@ -265,11 +379,10 @@ async def gallery_delete(file: str = "", x_gallery_key: str = Header(default="")
 
 
 def _product_usage(name: str):
-    """Ищет имя файла в товарах: главное фото (image), M2M-галерея (gallery)
-    и старое текстовое поле gallery_urls."""
+    """Ищет файл в товарах: главное фото (image), M2M-галерея (gallery)
+    и старое текстовое поле gallery_urls. Для галереи сверяет и uuid, и имя файла."""
     hits = []
     try:
-        import urllib.request
         base = "http://127.0.0.1:8055/items/products?limit=200&fields="
 
         def pull(fields):
@@ -277,12 +390,28 @@ def _product_usage(name: str):
                 return json.load(r)
 
         try:
-            data = pull("name,image,gallery_urls,gallery.directus_files_id.filename_download")
+            ids_data = pull("name,image,gallery_urls,gallery.id,gallery.directus_files_id")
         except Exception:
-            data = pull("name,image,gallery")
-        for p in data.get("data", []):
+            ids_data = pull("name,image,gallery")
+        try:
+            names_data = pull("name,image,gallery_urls,gallery.directus_files_id.filename_download")
+        except Exception:
+            names_data = {"data": []}
+
+        by_name = {}
+        for p in names_data.get("data", []):
+            by_name[p.get("name") or ""] = p
+
+        for p in ids_data.get("data", []):
+            extra = by_name.get(p.get("name") or "", {})
             blob = json.dumps(
-                [p.get("image"), p.get("gallery_urls"), p.get("gallery"), p.get("gallery_files")],
+                [
+                    p.get("image"),
+                    p.get("gallery_urls"),
+                    p.get("gallery"),
+                    extra.get("gallery"),
+                    p.get("gallery_files"),
+                ],
                 ensure_ascii=False,
             )
             if name in blob:
@@ -312,7 +441,12 @@ def _files_usage(name: str):
 
 
 @app.get("/gallery-api/usage")
-async def gallery_usage(file: str = ""):
+async def gallery_usage(file: str = "", id: str = ""):
+    if id:
+        uid = (id or "").strip()
+        if not re.fullmatch(r"[0-9a-fA-F-]{36}", uid):
+            raise HTTPException(status_code=400, detail="Неверный id файла")
+        return {"file": uid, "products": _product_usage(uid), "files": _files_usage(uid)}
     name = _safe_name(file)
     if not name:
         raise HTTPException(status_code=400, detail="Не указано имя файла")
