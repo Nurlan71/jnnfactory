@@ -33,6 +33,10 @@ backups/
 # Ключ публикации товаров (лежит только на сервере)
 admin/.gallery_key
 
+# Виртуальные папки галереи: runtime-манифест, не часть репозитория
+admin/.gallery_folders.json
+admin/.gallery_folders.*.tmp
+
 # Лиды из ИИ-чата и ключи чата (только на сервере)
 admin/leads.jsonl
 admin/.chat.env

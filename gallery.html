@@ -37,6 +37,42 @@
   .badge{display:inline-block;font-size:11px;padding:2px 7px;border-radius:99px;background:#eef1f4;color:#455;margin-left:6px;}
   .badge.media{background:#e8f0fe;color:#174ea6;}
   .badge.dup{background:#fff4e5;color:#8a4b00;}
+  .badge.git{background:#eceff1;color:#37474f;}
+  .badge.product{background:#e6f4ea;color:#137333;}
+  .badge.folder{background:#f3e8fd;color:#5b2a86;}
+  .folderbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px;}
+  .chip{display:inline-flex;align-items:center;gap:5px;border-radius:999px;padding:7px 12px;font-size:13px;line-height:1;background:#fff;color:var(--ink);border:1px solid var(--line);}
+  .chip:hover{border-color:#aeb5bf;}
+  .chip.active{background:#111;color:#fff;border-color:#111;}
+  .chip .cnt{font-size:11px;opacity:.65;}
+  .chip.active .cnt{opacity:.85;}
+  .move-select{font:inherit;padding:9px 12px;border:1px solid var(--line);border-radius:9px;background:#fff;color:var(--ink);min-width:240px;margin-top:4px;}
+  button.danger{background:var(--err);color:#fff;border-color:var(--err);}
+  button.danger:hover{background:#8f1d17;border-color:#8f1d17;}
+  button:disabled{opacity:.5;cursor:not-allowed;}
+  .modal-actions{gap:8px;}
+  .used{font-size:12px;line-height:1.45;margin:6px 0 8px;padding:6px 8px;background:#f7f8fa;border-radius:8px;color:#4b5563;}
+  .used a{color:#174ea6;text-decoration:none;font-weight:600;}
+  .used a:hover{text-decoration:underline;}
+  .used .more{color:var(--gray);}
+  .used button.linklike{margin-left:2px;}
+  button.linklike{background:none;border:0;padding:0;color:#174ea6;font:inherit;cursor:pointer;text-decoration:underline;}
+  button.linklike:hover{text-decoration:none;}
+  .note{border-left:3px solid #111;background:#fafbfc;padding:10px 12px;border-radius:8px;margin-top:10px;}
+  .note strong{color:var(--ink);}
+  .btnlink{display:inline-block;font-size:13px;padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);text-decoration:none;}
+  .btnlink:hover{border-color:#c3c8ce;}
+  .modal{position:fixed;inset:0;background:rgba(17,17,17,.45);display:flex;align-items:center;justify-content:center;z-index:100;padding:20px;}
+  .modal[hidden]{display:none;}
+  .modal-box{background:#fff;border-radius:14px;max-width:560px;width:100%;padding:20px;box-shadow:0 18px 60px rgba(0,0,0,.28);max-height:85vh;overflow:auto;}
+  .modal-box h3{margin:0 0 10px;font-size:17px;}
+  .modal-body{font-size:14px;color:#333;line-height:1.55;}
+  .modal-body p{margin:0 0 10px;}
+  .modal-list{margin:4px 0 10px 20px;padding:0;}
+  .modal-list li{margin:4px 0;}
+  .modal-body a{color:#174ea6;font-weight:600;}
+  .modal-body .muted{color:var(--gray);font-weight:400;}
+  .modal-actions{display:flex;justify-content:flex-end;margin-top:16px;}
   .toast{position:fixed;right:18px;bottom:18px;z-index:50;display:flex;flex-direction:column;gap:8px;}
   .toast div{background:#111;color:#fff;padding:10px 14px;border-radius:10px;font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,.25);}
   .toast div.err{background:var(--err);}
@@ -61,14 +97,43 @@
       <input type="password" id="keyInput" class="grow" placeholder="Ключ доступа (для загрузки, переименования и удаления)"/>
       <button id="keyBtn" class="primary">Сохранить ключ</button>
     </div>
-    <div class="hint">Чтение галереи открыто, запись (загрузка, переименование, удаление) - только с ключом. Ключ хранится в этом браузере.</div>
+    <div class="hint">Чтение галереи открыто, запись (загрузка, переименование, удаление, папки) — только с ключом. Ключ хранится в этом браузере. Если файл используется или отслеживается Git, интерфейс покажет предупреждение и предложит подтвердить действие. Для Git-файлов удаление/переименование стагируется через <code>git rm</code>/<code>git mv</code>: после этого нужен commit, иначе деплой будет заблокирован.</div>
+    <div class="hint note"><strong>Главное фото товара</strong> — верхнее (первое по порядку) фото в галерее товара. Порядок и перестановка выполняются в Directus, перетаскиванием за иконку-ручку в разделе «Товары». В этой галерее порядок не меняется.</div>
+  </div>
+
+  <div class="panel">
+    <div class="row">
+      <strong>Фото товара</strong>
+      <select id="productSelect" class="move-select" style="min-width:220px;margin-top:0;"></select>
+      <select id="productTarget" class="move-select" style="min-width:150px;margin-top:0;">
+        <option value="directus">В Directus</option>
+        <option value="local">Локально</option>
+      </select>
+      <input type="file" id="productFile" accept="image/*" hidden/>
+      <label for="productFile" class="btnlink">Выбрать файл</label>
+      <span id="productFileName" class="hint" style="margin:0;">файл не выбран</span>
+      <label class="hint" style="margin-top:0;"><input type="checkbox" id="productAttach" checked/> привязать к товару</label>
+      <button id="productUploadBtn" class="primary">Загрузить фото</button>
+    </div>
+    <div class="hint">Имя создаётся автоматически по slug товара: <code>{slug}.jpg</code>, <code>{slug}1.jpg</code>, <code>{slug}2.jpg</code>. Для Directus нужен серверный токен; для уже загруженных в нативную админку файлов используйте кнопку «SEO-имя» на карточке.</div>
+  </div>
+
+  <div class="panel">
+    <div class="row">
+      <button id="createFolderBtn" class="primary">Создать папку</button>
+      <button id="allFilesBtn" class="small">Все файлы</button>
+      <button id="rootFilesBtn" class="small">Без папки</button>
+      <span id="folderPath" class="hint" style="margin:0;"></span>
+    </div>
+    <div id="folderBar" class="folderbar"></div>
+    <div class="hint">Папки виртуальные: файлы остаются по адресам <code>/assets/&lt;file&gt;</code>, поэтому карточки товаров и Git-деплой не ломаются. Создание внутри текущей папки делает подпапку; «Переместить» меняет только структуру галереи.</div>
   </div>
 
   <div class="panel">
     <div class="drop" id="drop">
       <strong>Перетащите изображения сюда</strong><br/>
       или нажмите, чтобы выбрать файлы. Можно несколько сразу.
-      <div class="hint">JPG, PNG, WEBP, AVIF, GIF, SVG. До 50 МБ на файл. Имя файла латиницей без пробелов - удобнее для SEO. Кнопка «Удалить» с предупреждением, если файл используется на сайте. Фото, загруженные через админку (Directus), тоже видны здесь из медиатеки: их можно открыть, скопировать ссылку и проверить использование; порядок и удаление таких фото - в админке.</div>
+      <div class="hint">JPG, PNG, WEBP, AVIF, GIF, SVG. До 50 МБ на файл. Загрузка идёт в выбранную папку: <strong id="dropTarget">В корень галереи</strong>.</div>
     </div>
     <input type="file" id="fileInput" accept="image/*" multiple hidden/>
   </div>
@@ -90,318 +155,7 @@
 
 <div class="toast" id="toast"></div>
 
-<script>
-(function () {
-  'use strict';
-  var API = '/gallery-api';
-  var KEY_STORE = 'jnnGalleryKey';
-  var files = [];
-  var media = [];
-  var IMG_RE = /\.(jpe?g|jfif|png|webp|avif|gif|svg)$/i;
-  var UPLOAD_RE = /\.(jpe?g|jfif|png|webp|avif|gif|svg)$/i;
-
-  var $ = function (s) { return document.querySelector(s); };
-  var grid = $('#grid'), empty = $('#empty'), count = $('#count');
-  var keyInput = $('#keyInput'), keyState = $('#keyState');
-
-  function toast(msg, isErr) {
-    var d = document.createElement('div');
-    if (isErr) d.className = 'err';
-    d.textContent = msg;
-    $('#toast').appendChild(d);
-    setTimeout(function () { d.remove(); }, 3200);
-  }
-
-  function getKey() { return localStorage.getItem(KEY_STORE) || ''; }
-
-  function refreshKeyState() {
-    var k = getKey();
-    keyState.textContent = k ? 'ключ сохранён' : 'ключ не задан';
-    keyState.className = 'state' + (k ? ' on' : '');
-    if (k) keyInput.value = k;
-  }
-
-  function fmtSize(b) {
-    if (b == null) return '';
-    if (b < 1024) return b + ' Б';
-    if (b < 1048576) return (b / 1024).toFixed(0) + ' КБ';
-    return (b / 1048576).toFixed(1) + ' МБ';
-  }
-
-  function fmtDate(ts) {
-    if (!ts) return '';
-    var d = new Date(ts);
-    return d.toLocaleDateString('ru-RU') + ' ' + d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-  }
-
-  function copyUrl(url) {
-    var done = function () { toast('Скопировано: ' + url); };
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(url).then(done, function () { fallback(url, done); });
-    } else { fallback(url, done); }
-  }
-
-  function copyPath(name) { copyUrl('/assets/' + name); }
-
-  function fallback(text, cb) {
-    var ta = document.createElement('textarea');
-    ta.value = text; document.body.appendChild(ta); ta.select();
-    try { document.execCommand('copy'); cb(); } catch (e) { toast('Не удалось скопировать', true); }
-    ta.remove();
-  }
-
-  function rename(name) {
-    var k = getKey();
-    if (!k) { toast('Сначала задайте ключ доступа', true); return; }
-    var next = prompt('Новое имя файла (с расширением):', name);
-    if (!next || next === name) return;
-    fetch(API + '/rename', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Gallery-Key': k },
-      body: JSON.stringify({ old: name, new: next.trim() })
-    }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
-      .then(function (res) {
-        if (!res.ok) throw new Error((res.j && res.j.detail) || 'ошибка');
-        toast('Переименовано: ' + name + ' -> ' + res.j.name);
-        load();
-      })
-      .catch(function (e) { toast('Не удалось переименовать: ' + e.message, true); });
-  }
-
-  function upload(list) {
-    var k = getKey();
-    if (!k) { toast('Сначала задайте ключ доступа', true); return; }
-    // Фильтруем по расширению, а не по MIME: у части файлов (с телефона) тип пустой.
-    var items = [], bad = [];
-    Array.prototype.forEach.call(list, function (f) {
-      if (!f) return;
-      if (UPLOAD_RE.test(f.name || '')) items.push(f); else bad.push(f.name || 'без имени');
-    });
-    if (bad.length) toast('Не картинки, пропущено: ' + bad.join(', '), true);
-    if (!items.length) { toast('Нужны файлы изображений (jpg, png, webp, avif, gif, svg)', true); return; }
-
-    var big = items.filter(function (f) { return f.size > 50 * 1024 * 1024; });
-    if (big.length) {
-      items = items.filter(function (f) { return f.size <= 50 * 1024 * 1024; });
-      toast('Больше 50 МБ, пропущено: ' + big.map(function (f) { return f.name; }).join(', '), true);
-      if (!items.length) return;
-    }
-
-    var fd = new FormData();
-    items.forEach(function (f) { fd.append('files', f, f.name); });
-
-    toast('Загрузка: ' + items.length + ' файл(ов)...');
-    fetch(API + '/upload', { method: 'POST', headers: { 'X-Gallery-Key': k }, body: fd })
-      .then(function (r) {
-        if (r.status === 413) throw new Error('файл слишком большой для сервера (лимит 64 МБ на запрос)');
-        return r.json().then(function (j) { return { ok: r.ok, j: j }; });
-      })
-      .then(function (res) {
-        if (!res.ok) throw new Error((res.j && res.j.detail) || 'ошибка');
-        var up = (res.j.uploaded || []).length;
-        var sk = (res.j.skipped || []).length;
-        var errs = res.j.errors || [];
-        toast('Загружено: ' + up + (sk ? ', пропущено: ' + sk : '') + (errs.length ? ', ошибок: ' + errs.length : ''));
-        errs.concat(res.j.skipped || []).slice(0, 4).forEach(function (e) {
-          toast(e.name + ': ' + e.reason, true);
-        });
-        load();
-      })
-      .catch(function (e) { toast('Ошибка загрузки: ' + e.message, true); });
-  }
-
-  function del(name) {
-    var k = getKey();
-    if (!k) { toast('Сначала задайте ключ доступа', true); return; }
-    fetch(API + '/usage?file=' + encodeURIComponent(name))
-      .then(function (r) { return r.ok ? r.json() : { products: [], files: [] }; })
-      .catch(function () { return { products: [], files: [] }; })
-      .then(function (u) {
-        var used = [];
-        if (u.products && u.products.length) used.push('товары: ' + u.products.join(', '));
-        if (u.files && u.files.length) used.push('файлы: ' + u.files.slice(0, 6).join(', '));
-        var warn = used.length
-          ? '\n\nВНИМАНИЕ: файл используется:\n- ' + used.join('\n- ') + '\n\nУдаление сломает картинку в этих местах.'
-          : '\n\nФайл нигде не используется.';
-        if (!confirm('Удалить файл ' + name + '?' + warn)) return;
-        fetch(API + '/delete?file=' + encodeURIComponent(name), { method: 'DELETE', headers: { 'X-Gallery-Key': k } })
-          .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
-          .then(function (res) {
-            if (!res.ok) throw new Error((res.j && res.j.detail) || 'ошибка');
-            toast('Удалено: ' + name);
-            load();
-          })
-          .catch(function (e) { toast('Не удалось удалить: ' + e.message, true); });
-      });
-  }
-
-  function usageToast(id) {
-    fetch(API + '/usage?id=' + encodeURIComponent(id))
-      .then(function (r) { return r.ok ? r.json() : { products: [], files: [] }; })
-      .catch(function () { return { products: [], files: [] }; })
-      .then(function (u) {
-        var used = [];
-        if (u.products && u.products.length) used.push('товары: ' + u.products.join(', '));
-        if (u.files && u.files.length) used.push('страницы: ' + u.files.slice(0, 6).join(', '));
-        toast(used.length ? 'Используется: ' + used.join(' · ') : 'Нигде не используется');
-      });
-  }
-
-  function render() {
-    var q = $('#search').value.trim().toLowerCase();
-    var sort = $('#sort').value;
-    var all = files.concat(media);
-    var list = all.filter(function (f) { return !q || f.name.toLowerCase().indexOf(q) >= 0; });
-    list.sort(function (a, b) {
-      if (sort === 'date') return (b.mtime || 0) - (a.mtime || 0);
-      if (sort === 'size') return (b.size || 0) - (a.size || 0);
-      return a.name.localeCompare(b.name, 'ru');
-    });
-
-    grid.innerHTML = '';
-    count.textContent = 'файлов: ' + list.length + ' из ' + all.length + (media.length ? ' · медиатека: ' + media.length : '');
-
-    if (!list.length) { empty.hidden = false; return; }
-    empty.hidden = true;
-
-    list.forEach(function (f) {
-      var isMedia = f.source === 'directus';
-      var card = document.createElement('div');
-      card.className = 'card';
-
-      var thumb = document.createElement('div');
-      thumb.className = 'thumb';
-      var img = document.createElement('img');
-      img.loading = 'lazy';
-      img.src = f.url || ('/assets/' + f.name);
-      img.alt = f.name;
-      img.onerror = function () { this.style.opacity = 0.25; };
-      thumb.appendChild(img);
-
-      var body = document.createElement('div');
-      body.className = 'body';
-
-      var nm = document.createElement('div');
-      nm.className = 'name';
-      nm.textContent = f.name;
-      if (isMedia) {
-        var bm = document.createElement('span');
-        bm.className = 'badge media';
-        bm.textContent = 'медиатека';
-        bm.title = 'Файл из медиатеки Directus (загружен через админку)';
-        nm.appendChild(bm);
-      } else if (f.in_media) {
-        var bc = document.createElement('span');
-        bc.className = 'badge';
-        bc.textContent = 'копия в медиатеке';
-        bc.title = 'Такое же фото есть в медиатеке Directus';
-        nm.appendChild(bc);
-      }
-      if (f.dup) {
-        var bd = document.createElement('span');
-        bd.className = 'badge dup';
-        bd.textContent = 'ещё копий: ' + f.dup;
-        nm.appendChild(bd);
-      }
-
-      var sub = document.createElement('div');
-      sub.className = 'sub';
-      sub.textContent = fmtSize(f.size) + ' · ' + fmtDate(f.mtime);
-
-      var btns = document.createElement('div');
-      btns.className = 'btns';
-
-      var bCopy = document.createElement('button');
-      bCopy.className = 'small primary';
-      bCopy.textContent = isMedia ? 'Копировать URL' : 'Копировать путь';
-      bCopy.addEventListener('click', function () { copyUrl(f.url || ('/assets/' + f.name)); });
-      btns.appendChild(bCopy);
-
-      if (isMedia) {
-        var bOpen = document.createElement('button');
-        bOpen.className = 'small';
-        bOpen.textContent = 'Открыть';
-        bOpen.addEventListener('click', function () { window.open(f.url, '_blank', 'noopener'); });
-
-        var bUse = document.createElement('button');
-        bUse.className = 'small';
-        bUse.textContent = 'Использование';
-        bUse.addEventListener('click', function () { usageToast(f.id); });
-
-        btns.appendChild(bOpen);
-        btns.appendChild(bUse);
-      } else {
-        var bRen = document.createElement('button');
-        bRen.className = 'small';
-        bRen.textContent = 'Переименовать';
-        bRen.addEventListener('click', function () { rename(f.name); });
-
-        var bDel = document.createElement('button');
-        bDel.className = 'small';
-        bDel.textContent = 'Удалить';
-        bDel.style.color = 'var(--err)';
-        bDel.addEventListener('click', function () { del(f.name); });
-
-        btns.appendChild(bRen);
-        btns.appendChild(bDel);
-      }
-
-      body.appendChild(nm);
-      body.appendChild(sub);
-      body.appendChild(btns);
-      card.appendChild(thumb);
-      card.appendChild(body);
-      grid.appendChild(card);
-    });
-  }
-
-  function load() {
-    fetch(API + '/list')
-      .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-      .then(function (j) {
-        files = (j.files || []).filter(function (f) { return IMG_RE.test(f.name); });
-        media = j.directus || [];
-        render();
-        if (j.media_ok === false) toast('Медиатека Directus сейчас недоступна - показаны только файлы сайта', true);
-      })
-      .catch(function (e) { toast('Не удалось получить список: ' + e.message, true); count.textContent = 'ошибка'; });
-  }
-
-  // События
-  $('#refreshBtn').addEventListener('click', load);
-  $('#search').addEventListener('input', render);
-  $('#sort').addEventListener('change', render);
-  $('#keyBtn').addEventListener('click', function () {
-    var v = keyInput.value.trim();
-    if (!v) { localStorage.removeItem(KEY_STORE); refreshKeyState(); toast('Ключ удалён'); return; }
-    localStorage.setItem(KEY_STORE, v);
-    refreshKeyState();
-    toast('Ключ сохранён');
-  });
-
-  var drop = $('#drop'), fileInput = $('#fileInput');
-  drop.addEventListener('click', function () { fileInput.click(); });
-  fileInput.addEventListener('change', function () { upload(fileInput.files); fileInput.value = ''; });
-
-  ['dragenter', 'dragover'].forEach(function (ev) {
-    drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add('hot'); });
-  });
-  ['dragleave', 'drop'].forEach(function (ev) {
-    drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.remove('hot'); });
-  });
-  drop.addEventListener('drop', function (e) {
-    if (e.dataTransfer && e.dataTransfer.files) upload(e.dataTransfer.files);
-  });
-  // Загрузка из буфера обмена (Ctrl+V) - удобно для скриншотов
-  document.addEventListener('paste', function (e) {
-    if (!e.clipboardData || !e.clipboardData.files || !e.clipboardData.files.length) return;
-    upload(e.clipboardData.files);
-  });
-
-  refreshKeyState();
-  load();
-})();
-</script>
+<script src="/assets/js/gallery-admin.js?v=5"></script>
 <script src="/assets/js/chat-widget.js?v=4" defer></script>
 </body>
 </html>
