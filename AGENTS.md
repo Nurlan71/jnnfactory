@@ -14,5 +14,5 @@
 - Черновик (`show_in_catalog = false`) публикуется с `meta robots "noindex, follow"` и без записей в sitemap/llms.
 - Существующие строки `llms.txt` / `llms-full.txt` не переписываются: новые модели дописываются, прежние остаются как есть (`--refresh-llms` перезапишет данными из Directus).
 - Ручной запуск: `venv/bin/python -m admin.publish_product --slug <slug> | --sync | --all-missing | --unpublish <slug> | --list`.
-- API админки: `POST /gallery-api/publish` (заголовок `x-gallery-key`), `GET /gallery-api/publish/status`, `GET /gallery-api/publish/log`.
-- Автоматика на VPS: флоу Directus `publish_product` (события `items.create`/`items.update` → вебхук на `/gallery-api/publish`) и systemd-таймер `jnnfactory-publish.timer` (сверка с Directus каждые 5 минут).
+- Ручные API админки: `POST /gallery-api/publish` (требует админ-сессию Directus или Bearer-токен администратора), `GET /gallery-api/publish/status`, `GET /gallery-api/publish/log`.
+- Автоматика на VPS: флоу Directus `publish_product` (события `items.create`/`items.update` → `POST /webhooks/directus/publish` с заголовком `X-Webhook-Secret`) и systemd-таймер `jnnfactory-publish.timer` (сверка с Directus каждые 5 минут). Секрет — `JNN_PUBLISH_WEBHOOK_SECRET`; старый `x-gallery-key` для flow больше не используется.

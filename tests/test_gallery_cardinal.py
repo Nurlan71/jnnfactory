@@ -14,11 +14,19 @@ from admin import main as gallery_main
 KEY = "test-gallery-key"
 HEADERS = {"X-Gallery-Key": KEY}
 MEDIA_ID = "12345678-1234-1234-1234-123456789abc"
+TEST_ADMIN = {"id": "test-admin", "email": "admin@example.test", "name": "Test Admin"}
 
 
 @pytest.fixture()
 def client(monkeypatch):
-    monkeypatch.setenv("JNN_GALLERY_KEY", KEY)
+    monkeypatch.setattr(gallery_main, "_authenticate_admin", lambda request: {
+        "type": "test", "user": TEST_ADMIN,
+    })
+    return TestClient(gallery_main.app)
+
+
+@pytest.fixture()
+def anon_client(monkeypatch):
     return TestClient(gallery_main.app)
 
 
@@ -179,9 +187,9 @@ def test_upload_product_directus_autonames_and_attaches(client, assets, monkeypa
     assert calls["attach"] == ("7", MEDIA_ID)
 
 
-def test_upload_product_requires_key(client, assets, monkeypatch):
+def test_upload_product_requires_admin_session(anon_client, assets, monkeypatch):
     monkeypatch.setattr(gallery_main, "_directus_product_records", lambda: ([PRODUCT], None))
-    response = client.post(
+    response = anon_client.post(
         "/gallery-api/upload-product",
         data={"product": "7", "target": "local"},
         files={"file": ("phone.jpg", b"new", "image/jpeg")},
