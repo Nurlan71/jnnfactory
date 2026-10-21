@@ -27,11 +27,14 @@ CLI (на VPS из /var/www/jnnfactory):
   venv/bin/python -m admin.publish_product --all-missing
   venv/bin/python -m admin.publish_product --unpublish kurtka-bomber
 
-API (админка; nginx проксирует /gallery-api/ на порт 5000):
+API (админка; /gallery-api/* требует админ-сессию Directus):
   GET  /gallery-api/publish/status
   POST /gallery-api/publish    {"slug": "..."} | {"sync": true} | {"all_missing": true}
   POST /gallery-api/unpublish  {"slug": "..."}
   GET  /gallery-api/publish/log?limit=20
+
+Автоматический flow Directus:
+  POST /webhooks/directus/publish с заголовком X-Webhook-Secret
 """
 
 from __future__ import annotations

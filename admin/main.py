@@ -1,6 +1,6 @@
-import datetime, hashlib, hmac, json, mimetypes, os, re, shutil, subprocess, threading, urllib.error, urllib.parse, urllib.request, uuid
+import base64, datetime, hashlib, hmac, json, mimetypes, os, re, secrets, shutil, subprocess, threading, time, urllib.error, urllib.parse, urllib.request, uuid
 from typing import List, Optional
-from fastapi import FastAPI, UploadFile, File, Header, HTTPException, Body, Request, Form
+from fastapi import FastAPI, UploadFile, File, Header, HTTPException, Body, Request, Form, Response
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -9,7 +9,7 @@ app = FastAPI(title="JNN Factory Enterprise Engine")
 DATA_FILE = "/var/www/jnnfactory/admin/site_data.json"
 ADMIN_HTML = "/var/www/jnnfactory/admin/index.html"
 INDEX_FILE = "/var/www/jnnfactory/index.html"
-ASSETS_DIR = "/var/www/jnnfactory/assets"
+ASSETS_DIR = os.environ.get("JNN_ASSETS_DIR") or "/var/www/jnnfactory/assets"
 
 if os.path.exists(ASSETS_DIR):
     app.mount("/assets", StaticFiles(directory=ASSETS_DIR), name="assets")
@@ -150,7 +150,9 @@ async def update_catalog(payload: dict, x_gallery_key: str = Header(default=""))
 GALLERY_KEY_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".gallery_key")
 GALLERY_EXTS = {".jpg", ".jpeg", ".jfif", ".png", ".webp", ".avif", ".gif", ".svg"}
 GALLERY_MAX_FILE = 50 * 1024 * 1024  # 50 МБ на файл
-GALLERY_HTML = os.path.join(os.path.dirname(ASSETS_DIR), "gallery.html")
+GALLERY_ADMIN_DIR = os.path.dirname(os.path.abspath(__file__))
+GALLERY_HTML = os.path.join(GALLERY_ADMIN_DIR, "gallery.html")
+GALLERY_STATIC_DIR = os.path.join(GALLERY_ADMIN_DIR, "static")
 
 # Медиатека Directus: фото, загруженные через админку. Только чтение, без секретов:
 # список берётся из публичного /files (localhost), хэши — из storage-файлов.
@@ -210,6 +212,420 @@ def _check_key(key: Optional[str]) -> None:
         raise HTTPException(status_code=503, detail="Ключ галереи не настроен на сервере")
     if not key or not hmac.compare_digest(key.encode("utf-8"), actual.encode("utf-8")):
         raise HTTPException(status_code=401, detail="Неверный ключ доступа")
+
+
+# ---------------------------------------------------------------------------
+# Админ-сессия Directus для /gallery-api/*
+#
+# Публичной галереи больше нет: страница управления живёт на
+# admin.jnnfactory.online/gallery и требует логин Directus с правами
+# администратора. Пароль проверяет Directus (/auth/login), а не этот сервис.
+# В браузере хранится только непрозрачный HttpOnly session-id; access/refresh
+# токены Directus остаются в памяти процесса.
+# ---------------------------------------------------------------------------
+ADMIN_ORIGIN = (os.environ.get("JNN_ADMIN_ORIGIN") or "https://admin.jnnfactory.online").rstrip("/")
+SESSION_COOKIE = "jnn_gallery_sid"
+CSRF_COOKIE = "jnn_gallery_csrf"
+SESSION_IDLE = 8 * 3600
+_COOKIE_SECURE = (os.environ.get("JNN_GALLERY_COOKIE_SECURE") or "1").strip().lower() not in {
+    "0", "false", "no", "off",
+}
+_ADMIN_SESSIONS = {}
+_ADMIN_SESSIONS_LOCK = threading.RLock()
+_LOGIN_FAILS = {}
+_LOGIN_FAILS_LOCK = threading.RLock()
+_LOGIN_MAX_FAILS = 5
+_LOGIN_WINDOW = 300
+PUBLISH_WEBHOOK_SECRET = (os.environ.get("JNN_PUBLISH_WEBHOOK_SECRET") or "").strip()
+
+
+class _DirectusAuthError(Exception):
+    """Ошибка auth/me Directus; не путать с ошибкой записи файлов."""
+
+    def __init__(self, status: int, detail: str):
+        super().__init__(detail)
+        self.status = int(status or 503)
+        self.detail = detail or "Directus недоступен"
+
+
+def _directus_data(response):
+    if isinstance(response, dict) and isinstance(response.get("data"), (dict, list)):
+        return response["data"]
+    return response
+
+
+def _directus_error_text(raw: bytes) -> str:
+    try:
+        data = json.loads((raw or b"").decode("utf-8", "replace"))
+    except Exception:
+        return "Ошибка Directus"
+    if isinstance(data, dict):
+        errors = data.get("errors")
+        if isinstance(errors, list) and errors and isinstance(errors[0], dict):
+            return str(errors[0].get("message") or "Ошибка Directus")
+        if data.get("error"):
+            return str(data["error"])
+        if data.get("message"):
+            return str(data["message"])
+    return "Ошибка Directus"
+
+
+def _directus_auth_request(method: str, path: str, payload=None, token: str = "", timeout: int = 15):
+    """Запрос к Directus от имени пользователя (login/me/refresh)."""
+    url = DIRECTUS_API.rstrip("/") + path
+    data = None
+    headers = {"Accept": "application/json"}
+    if payload is not None:
+        data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        headers["Content-Type"] = "application/json"
+    if token:
+        headers["Authorization"] = "Bearer " + token
+    req = urllib.request.Request(url, data=data, headers=headers, method=method)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            raw = resp.read()
+            return json.loads(raw.decode("utf-8")) if raw else {}
+    except urllib.error.HTTPError as exc:
+        raise _DirectusAuthError(exc.code, _directus_error_text(exc.read())) from None
+    except Exception:
+        raise _DirectusAuthError(503, "Directus недоступен") from None
+
+
+def _directus_login(email: str, password: str) -> dict:
+    data = _directus_data(_directus_auth_request(
+        "POST", "/auth/login",
+        {"email": email, "password": password, "mode": "json"},
+    ))
+    if not isinstance(data, dict) or not data.get("access_token"):
+        raise _DirectusAuthError(502, "Directus не вернул access token")
+    return data
+
+
+def _directus_me(token: str) -> dict:
+    fields = (
+        "id,email,first_name,last_name,role.id,role.name,role.admin_access,"
+        "policies.policy.id,policies.policy.name,policies.policy.admin_access"
+    )
+    try:
+        data = _directus_data(_directus_auth_request(
+            "GET", "/users/me?fields=" + urllib.parse.quote(fields, safe=",.*"), token=token,
+        ))
+    except _DirectusAuthError as exc:
+        if exc.status != 400:
+            raise
+        data = _directus_data(_directus_auth_request("GET", "/users/me?fields=*", token=token))
+    if not isinstance(data, dict):
+        raise _DirectusAuthError(502, "Directus вернул неожиданный ответ /users/me")
+    return data
+
+
+def _directus_refresh(refresh_token: str) -> dict:
+    data = _directus_data(_directus_auth_request(
+        "POST", "/auth/refresh", {"refresh_token": refresh_token, "mode": "json"},
+    ))
+    if not isinstance(data, dict) or not data.get("access_token"):
+        raise _DirectusAuthError(401, "Сессия Directus истекла")
+    return data
+
+
+def _jwt_claims(token: str) -> dict:
+    """Читает payload уже проверенного Directus JWT (подпись проверяет Directus)."""
+    try:
+        parts = token.split(".")
+        if len(parts) < 2:
+            return {}
+        payload = parts[1] + "=" * ((4 - len(parts[1]) % 4) % 4)
+        data = json.loads(base64.urlsafe_b64decode(payload.encode("ascii")))
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def _directus_is_admin(user: dict, token: str = "") -> bool:
+    """Администратор Directus: admin_access в policy или роль Administrator."""
+    claims = _jwt_claims(token) if token else {}
+    if claims.get("admin_access") is True:
+        return True
+
+    def _policy_admin(value) -> bool:
+        if isinstance(value, list):
+            return any(_policy_admin(x) for x in value)
+        if not isinstance(value, dict):
+            return False
+        if value.get("admin_access") is True:
+            return True
+        policy = value.get("policy")
+        if isinstance(policy, dict) and policy.get("admin_access") is True:
+            return True
+        if isinstance(value.get("policies"), list):
+            return any(_policy_admin(x) for x in value["policies"])
+        return False
+
+    if _policy_admin(user.get("policies")):
+        return True
+    role = user.get("role")
+    if isinstance(role, dict):
+        if role.get("admin_access") is True:
+            return True
+        if str(role.get("name") or "").strip().casefold() == "administrator":
+            return True
+    if isinstance(role, str) and role:
+        # Некоторые политики Directus отдают role только идентификатором.
+        try:
+            role_data = _directus_data(_directus_auth_request(
+                "GET", "/roles/" + urllib.parse.quote(role) + "?fields=id,name,admin_access", token=token,
+            ))
+            if isinstance(role_data, dict):
+                if role_data.get("admin_access") is True:
+                    return True
+                if str(role_data.get("name") or "").strip().casefold() == "administrator":
+                    return True
+        except _DirectusAuthError:
+            pass
+    return False
+
+
+def _public_user(user: dict) -> dict:
+    name = " ".join(
+        part for part in (str(user.get("first_name") or "").strip(), str(user.get("last_name") or "").strip())
+        if part
+    )
+    return {
+        "id": str(user.get("id") or ""),
+        "email": str(user.get("email") or ""),
+        "name": name or str(user.get("email") or "Администратор"),
+    }
+
+
+def _expires_at(auth: dict) -> float:
+    raw = auth.get("expires")
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        value = 900000.0
+    # Directus отдаёт миллисекунды; маленькие значения считаем секундами.
+    seconds = value / 1000.0 if value > 3600 else value
+    return time.time() + max(30.0, seconds - 30.0)
+
+
+def _refresh_session(session: dict) -> None:
+    refresh_token = session.get("refresh_token") or ""
+    if not refresh_token:
+        raise HTTPException(status_code=401, detail="Сессия истекла. Войдите заново.")
+    try:
+        auth = _directus_refresh(refresh_token)
+    except _DirectusAuthError as exc:
+        raise HTTPException(status_code=401, detail="Сессия истекла. Войдите заново.") from exc
+    session["access_token"] = auth["access_token"]
+    session["refresh_token"] = auth.get("refresh_token") or refresh_token
+    session["expires_at"] = _expires_at(auth)
+
+
+def _validated_session_user(session: dict) -> dict:
+    if time.time() >= session.get("expires_at", 0):
+        _refresh_session(session)
+    token = session.get("access_token") or ""
+    try:
+        user = _directus_me(token)
+    except _DirectusAuthError as exc:
+        if exc.status == 401:
+            _refresh_session(session)
+            token = session.get("access_token") or ""
+            try:
+                user = _directus_me(token)
+            except _DirectusAuthError as exc2:
+                raise HTTPException(status_code=401, detail="Сессия Directus истекла. Войдите заново.") from exc2
+        elif exc.status == 503:
+            raise HTTPException(status_code=503, detail="Directus недоступен") from exc
+        else:
+            raise HTTPException(status_code=401, detail="Сессия Directus недействительна") from exc
+    if not _directus_is_admin(user, token):
+        raise HTTPException(status_code=403, detail="Нужны права администратора Directus")
+    session["user"] = _public_user(user)
+    session["last_seen"] = time.time()
+    return session["user"]
+
+
+def _session_from_request(request: Request):
+    sid = request.cookies.get(SESSION_COOKIE) or ""
+    if not sid:
+        return None, None
+    with _ADMIN_SESSIONS_LOCK:
+        session = _ADMIN_SESSIONS.get(sid)
+    if not session:
+        return None, None
+    if time.time() - float(session.get("last_seen", 0)) > SESSION_IDLE:
+        with _ADMIN_SESSIONS_LOCK:
+            _ADMIN_SESSIONS.pop(sid, None)
+        return None, None
+    return sid, session
+
+
+def _origin_allowed(value: str) -> bool:
+    if not value:
+        return True
+    try:
+        parsed = urllib.parse.urlsplit(value)
+    except ValueError:
+        return False
+    return (parsed.scheme + "://" + parsed.netloc).rstrip("/") == ADMIN_ORIGIN
+
+
+def _csrf_ok(request: Request, session: dict) -> bool:
+    if request.method in ("GET", "HEAD", "OPTIONS"):
+        return True
+    origin = request.headers.get("origin") or request.headers.get("referer") or ""
+    if not _origin_allowed(origin):
+        return False
+    supplied = request.headers.get("x-csrf-token") or ""
+    expected = session.get("csrf") or ""
+    return bool(supplied and expected and secrets.compare_digest(supplied, expected))
+
+
+def _authenticate_admin(request: Request) -> dict:
+    """Проверка администратора для всех /gallery-api/*."""
+    auth_header = request.headers.get("authorization") or ""
+    if auth_header.lower().startswith("bearer "):
+        token = auth_header[7:].strip()
+        if not token:
+            raise HTTPException(status_code=401, detail="Нужна авторизация")
+        try:
+            user = _directus_me(token)
+        except _DirectusAuthError as exc:
+            if exc.status == 503:
+                raise HTTPException(status_code=503, detail="Directus недоступен") from exc
+            raise HTTPException(status_code=401, detail="Токен Directus недействителен") from exc
+        if not _directus_is_admin(user, token):
+            raise HTTPException(status_code=403, detail="Нужны права администратора Directus")
+        return {"type": "bearer", "user": _public_user(user)}
+
+    sid, session = _session_from_request(request)
+    if not session:
+        raise HTTPException(status_code=401, detail="Нужна авторизация администратора")
+    user = _validated_session_user(session)
+    if not _csrf_ok(request, session):
+        raise HTTPException(status_code=403, detail="CSRF-проверка не пройдена")
+    with _ADMIN_SESSIONS_LOCK:
+        _ADMIN_SESSIONS[sid]["last_seen"] = time.time()
+    return {"type": "session", "user": user}
+
+
+def _client_ip(request: Request) -> str:
+    for header in ("x-real-ip", "x-forwarded-for"):
+        value = (request.headers.get(header) or "").strip()
+        if value:
+            return value.split(",", 1)[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def _login_allowed(ip: str) -> bool:
+    now = time.time()
+    with _LOGIN_FAILS_LOCK:
+        attempts = [t for t in _LOGIN_FAILS.get(ip, []) if now - t < _LOGIN_WINDOW]
+        _LOGIN_FAILS[ip] = attempts
+        return len(attempts) < _LOGIN_MAX_FAILS
+
+
+def _login_failed(ip: str) -> None:
+    with _LOGIN_FAILS_LOCK:
+        _LOGIN_FAILS.setdefault(ip, []).append(time.time())
+
+
+def _set_session_cookies(response: Response, sid: str, csrf: str) -> None:
+    response.set_cookie(
+        SESSION_COOKIE, sid, max_age=SESSION_IDLE, httponly=True,
+        secure=_COOKIE_SECURE, samesite="strict", path="/",
+    )
+    response.set_cookie(
+        CSRF_COOKIE, csrf, max_age=SESSION_IDLE, httponly=False,
+        secure=_COOKIE_SECURE, samesite="strict", path="/",
+    )
+
+
+def _clear_session_cookies(response: Response) -> None:
+    response.delete_cookie(SESSION_COOKIE, path="/", secure=_COOKIE_SECURE, samesite="strict")
+    response.delete_cookie(CSRF_COOKIE, path="/", secure=_COOKIE_SECURE, samesite="strict")
+
+
+def _new_admin_session(user: dict, auth: dict) -> tuple:
+    sid = secrets.token_urlsafe(32)
+    csrf = secrets.token_urlsafe(32)
+    now = time.time()
+    with _ADMIN_SESSIONS_LOCK:
+        _ADMIN_SESSIONS[sid] = {
+            "user": _public_user(user),
+            "access_token": auth["access_token"],
+            "refresh_token": auth.get("refresh_token") or "",
+            "expires_at": _expires_at(auth),
+            "csrf": csrf,
+            "created": now,
+            "last_seen": now,
+        }
+    return sid, csrf
+
+
+@app.middleware("http")
+async def _gallery_auth_middleware(request: Request, call_next):
+    """Закрывает весь /gallery-api/*, включая будущие эндпоинты."""
+    if request.url.path.startswith("/gallery-api/") and request.method != "OPTIONS":
+        try:
+            request.state.admin = _authenticate_admin(request)
+        except HTTPException as exc:
+            return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+    return await call_next(request)
+
+
+@app.post("/gallery-auth/login")
+async def gallery_login(request: Request, response: Response, payload: dict = Body(...)):
+    origin = request.headers.get("origin") or ""
+    if origin and not _origin_allowed(origin):
+        raise HTTPException(status_code=403, detail="Запрос с чужого origin запрещён")
+    ip = _client_ip(request)
+    if not _login_allowed(ip):
+        raise HTTPException(status_code=429, detail="Слишком много попыток входа. Повторите позже.")
+    email = str(payload.get("email") or "").strip()
+    password = str(payload.get("password") or "")
+    if not email or not password:
+        raise HTTPException(status_code=400, detail="Укажите email и пароль Directus")
+    try:
+        auth = await run_in_threadpool(_directus_login, email, password)
+    except _DirectusAuthError as exc:
+        _login_failed(ip)
+        if exc.status in (401, 403):
+            raise HTTPException(status_code=401, detail="Неверный email или пароль Directus") from exc
+        if exc.status == 429:
+            raise HTTPException(status_code=429, detail="Directus временно ограничил вход") from exc
+        raise HTTPException(status_code=503, detail="Не удалось войти в Directus") from exc
+    token = auth["access_token"]
+    try:
+        user = await run_in_threadpool(_directus_me, token)
+    except _DirectusAuthError as exc:
+        _login_failed(ip)
+        raise HTTPException(status_code=401, detail="Не удалось проверить пользователя Directus") from exc
+    if not _directus_is_admin(user, token):
+        _login_failed(ip)
+        raise HTTPException(status_code=403, detail="Нужны права администратора Directus")
+    sid, csrf = _new_admin_session(user, auth)
+    _set_session_cookies(response, sid, csrf)
+    with _LOGIN_FAILS_LOCK:
+        _LOGIN_FAILS.pop(ip, None)
+    return {"ok": True, "user": _public_user(user)}
+
+
+@app.get("/gallery-auth/me")
+async def gallery_me(request: Request):
+    admin = _authenticate_admin(request)
+    return {"authenticated": True, "user": admin["user"], "type": admin["type"]}
+
+
+@app.post("/gallery-auth/logout")
+async def gallery_logout(request: Request, response: Response):
+    sid = request.cookies.get(SESSION_COOKIE) or ""
+    if sid:
+        with _ADMIN_SESSIONS_LOCK:
+            _ADMIN_SESSIONS.pop(sid, None)
+    _clear_session_cookies(response)
+    return {"ok": True}
 
 
 def _safe_name(name: str) -> str:
@@ -400,6 +816,27 @@ def _set_folder_assignment(source: str, key: str, folder_id: str = "") -> None:
 
 def _move_folder_assignment(source: str, key: str, folder_id: str) -> None:
     _set_folder_assignment(source, key, folder_id)
+
+
+def _move_folder_assignments(items: list, folder_id: str) -> int:
+    """Атомарно перемещает несколько файлов: один manifest, одна запись."""
+    with _FOLDERS_LOCK:
+        data = _folders_strict()
+        if folder_id and folder_id not in _folder_ids(data):
+            raise ValueError("Папка не найдена")
+        keys = []
+        for source, key in items:
+            storage_key = _folder_key(source, key)
+            if not storage_key:
+                raise ValueError("Не указан файл")
+            keys.append(storage_key)
+        for storage_key in keys:
+            if folder_id:
+                data["files"][storage_key] = folder_id
+            else:
+                data["files"].pop(storage_key, None)
+        _save_folders(data)
+        return len(keys)
 
 
 def _rename_folder_assignment(old: str, new: str) -> None:
@@ -966,18 +1403,11 @@ async def gallery_list():
     return await run_in_threadpool(build)
 
 
-@app.get("/gallery-api/key")
-async def gallery_key_status():
-    return {"configured": bool(_gallery_key())}
-
-
 @app.post("/gallery-api/upload")
 async def gallery_upload(
     files: List[UploadFile] = File(...),
     folder_id: str = Form(""),
-    x_gallery_key: str = Header(default=""),
 ):
-    _check_key(x_gallery_key)
     folder_id = (folder_id or "").strip()
     if folder_id:
         try:
@@ -1062,8 +1492,7 @@ async def gallery_folders():
 
 
 @app.post("/gallery-api/folders")
-async def gallery_folder_create(payload: dict = Body(...), x_gallery_key: str = Header(default="")):
-    _check_key(x_gallery_key)
+async def gallery_folder_create(payload: dict = Body(...), ):
     try:
         name = _valid_folder_name(payload.get("name"))
         folder = _create_folder(name, str(payload.get("parent") or "").strip())
@@ -1077,8 +1506,7 @@ async def gallery_folder_create(payload: dict = Body(...), x_gallery_key: str = 
 
 
 @app.post("/gallery-api/folders/move")
-async def gallery_folder_move(payload: dict = Body(...), x_gallery_key: str = Header(default="")):
-    _check_key(x_gallery_key)
+async def gallery_folder_move(payload: dict = Body(...), ):
     source = str(payload.get("source") or "").strip().lower()
     key = str(payload.get("key") or "").strip()
     folder_id = str(payload.get("folder_id") or "").strip()
@@ -1112,14 +1540,12 @@ async def gallery_upload_product(
     target: str = Form("directus"),
     attach: bool = Form(False),
     folder_id: str = Form(""),
-    x_gallery_key: str = Header(default=""),
 ):
     """Загрузка фото товара с SEO-именем ``slug.jpg`` / ``slug1.jpg``.
 
     Directus — основной target. Локальный target оставлен для legacy-карточек,
     но не привязывает файл к товару (для этого нужен Directus file id).
     """
-    _check_key(x_gallery_key)
     target = (target or "directus").strip().lower()
     if target not in ("directus", "local"):
         raise HTTPException(status_code=400, detail="target должен быть directus или local")
@@ -1231,9 +1657,7 @@ async def gallery_upload_product(
 async def gallery_delete(
     file: str = "",
     force: bool = False,
-    x_gallery_key: str = Header(default=""),
 ):
-    _check_key(x_gallery_key)
     name = _existing_name(file)
     if not name:
         raise HTTPException(status_code=400, detail="Не указано имя файла")
@@ -1687,8 +2111,7 @@ def _media_usage_report(file_id: str, media_name: str = ""):
 
 
 @app.get("/gallery-api/usage")
-async def gallery_usage(file: str = "", id: str = "", x_gallery_key: str = Header(default="")):
-    _check_key(x_gallery_key)
+async def gallery_usage(file: str = "", id: str = "", ):
     if id:
         try:
             uid = _media_id(id)
@@ -1724,14 +2147,13 @@ async def gallery_usage(file: str = "", id: str = "", x_gallery_key: str = Heade
 
 
 @app.get("/gallery-api/usage-check")
-async def gallery_usage_check(file: str = "", id: str = "", x_gallery_key: str = Header(default="")):
+async def gallery_usage_check(file: str = "", id: str = "", ):
     """Проверка перед удалением/переименованием.
 
     Использование возвращает 409, но с ``can_force: true``: UI показывает
     предупреждение и может подтвердить принудительное действие. Git и symlink
     также можно обойти только явным force.
     """
-    _check_key(x_gallery_key)
     if id:
         try:
             uid = _media_id(id)
@@ -1878,8 +2300,7 @@ async def gallery_usage_check(file: str = "", id: str = "", x_gallery_key: str =
 
 
 @app.post("/gallery-api/rename")
-async def gallery_rename(payload: dict = Body(...), x_gallery_key: str = Header(default="")):
-    _check_key(x_gallery_key)
+async def gallery_rename(payload: dict = Body(...), ):
     old = _existing_name(payload.get("old", ""))
     new = _existing_name(payload.get("new", ""))
     force = bool(payload.get("force"))
@@ -2048,8 +2469,7 @@ async def gallery_rename(payload: dict = Body(...), x_gallery_key: str = Header(
 
 
 @app.post("/gallery-api/media/rename")
-async def gallery_media_rename(payload: dict = Body(...), x_gallery_key: str = Header(default="")):
-    _check_key(x_gallery_key)
+async def gallery_media_rename(payload: dict = Body(...), ):
     try:
         uid = _media_id(payload.get("id"))
     except ValueError as exc:
@@ -2103,13 +2523,12 @@ async def gallery_media_rename(payload: dict = Body(...), x_gallery_key: str = H
 
 
 @app.post("/gallery-api/media/auto-name")
-async def gallery_media_auto_name(payload: dict = Body(...), x_gallery_key: str = Header(default="")):
+async def gallery_media_auto_name(payload: dict = Body(...), ):
     """Доводит имя уже загруженного в Directus файла до ``slug.jpg``.
 
     Нужен для файлов, загруженных через нативную админку Directus: перехватить
     такую загрузку без Directus-flow нельзя, но имя можно исправить одной кнопкой.
     """
-    _check_key(x_gallery_key)
     try:
         uid = _media_id(payload.get("id"))
         info = await run_in_threadpool(_directus_file_info, uid)
@@ -2160,9 +2579,7 @@ async def gallery_media_auto_name(payload: dict = Body(...), x_gallery_key: str 
 async def gallery_media_delete(
     file_id: str,
     force: bool = False,
-    x_gallery_key: str = Header(default=""),
 ):
-    _check_key(x_gallery_key)
     try:
         uid = _media_id(file_id)
         info = await run_in_threadpool(_directus_file_info, uid)
@@ -2207,37 +2624,169 @@ async def gallery_media_delete(
     }
 
 
+def _batch_targets(payload: dict) -> list:
+    items = payload.get("items") if isinstance(payload, dict) else None
+    if not isinstance(items, list) or not items:
+        raise HTTPException(status_code=400, detail="Не выбран ни один файл")
+    if len(items) > 100:
+        raise HTTPException(status_code=400, detail="За один раз можно обработать не более 100 файлов")
+    targets = []
+    seen = set()
+    for item in items:
+        if not isinstance(item, dict):
+            raise HTTPException(status_code=400, detail="Некорректный элемент списка")
+        source = str(item.get("source") or "local").strip().lower()
+        raw_key = item.get("key")
+        if source == "local":
+            key = _existing_name(raw_key)
+        elif source == "directus":
+            try:
+                key = _media_id(raw_key)
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+        else:
+            raise HTTPException(status_code=400, detail="Неизвестный источник файла")
+        if not key:
+            raise HTTPException(status_code=400, detail="Не указан файл")
+        marker = (source, key)
+        if marker in seen:
+            continue
+        seen.add(marker)
+        targets.append((source, key))
+    return targets
+
+
+def _json_response_payload(response) -> tuple:
+    if isinstance(response, JSONResponse):
+        try:
+            body = json.loads(response.body.decode("utf-8"))
+        except Exception:
+            body = {}
+        return int(response.status_code), body
+    return 200, response
+
+
+@app.post("/gallery-api/batch/move")
+async def gallery_batch_move(payload: dict = Body(...)):
+    targets = _batch_targets(payload)
+    folder_id = str(payload.get("folder_id") or "").strip()
+    try:
+        moved = await run_in_threadpool(_move_folder_assignments, targets, folder_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail="Папки недоступны: " + str(exc)) from exc
+    return {"ok": True, "moved": moved, "folder_id": folder_id}
+
+
+@app.post("/gallery-api/batch/delete")
+async def gallery_batch_delete(payload: dict = Body(...)):
+    targets = _batch_targets(payload)
+    force = bool(payload.get("force"))
+
+    # Сначала проверяем весь набор, чтобы не удалить половину и не упереться
+    # в используемый файл. Проверки те же, что у одиночного удаления.
+    checked = []
+    blocked = []
+    errors = []
+    for source, key in targets:
+        if source == "directus":
+            result = await gallery_usage_check(id=key)
+        else:
+            result = await gallery_usage_check(file=key)
+        status, body = _json_response_payload(result)
+        body = dict(body or {})
+        body.update({"source": source, "key": key})
+        checked.append((source, key))
+
+        reason = str(body.get("reason") or "")
+        force_required = (
+            status == 409
+            or bool(body.get("force_required"))
+            or (body.get("deletable") is False and body.get("can_force") is True)
+        )
+        if force_required:
+            blocked.append(body)
+            continue
+        if status >= 400 or body.get("deletable") is not True:
+            # git_unavailable/usage_unavailable приходят с HTTP 200, но
+            # действие всё равно запрещено. Для UI это ошибка проверки, а не
+            # повод показать force-подтверждение.
+            error_status = status
+            if error_status < 400:
+                error_status = 503 if reason in ("git_unavailable", "usage_unavailable") else 400
+            errors.append({"status": error_status, "item": body})
+    if errors:
+        return JSONResponse(status_code=503 if any(e["status"] == 503 for e in errors) else 400, content={
+            "ok": False, "reason": "preflight_failed", "errors": errors, "blocked": blocked,
+        })
+    if blocked and not force:
+        return JSONResponse(status_code=409, content={
+            "ok": False, "reason": "force_required", "blocked": blocked,
+            "can_force": any(bool(item.get("can_force")) for item in blocked),
+            "detail": "Часть файлов используется, отслеживается Git или является ссылкой. Нужно подтверждение.",
+        })
+    if blocked and force and any(not bool(item.get("can_force")) for item in blocked):
+        return JSONResponse(status_code=409, content={
+            "ok": False, "reason": "force_unavailable", "blocked": blocked,
+            "can_force": False,
+            "detail": "Для части файлов принудительное действие недоступно: проверка Git или usage не пройдена.",
+        })
+
+    deleted = []
+    failed = []
+    for source, key in checked:
+        try:
+            if source == "directus":
+                result = await gallery_media_delete(file_id=key, force=force)
+            else:
+                result = await gallery_delete(file=key, force=force)
+            status, body = _json_response_payload(result)
+        except HTTPException as exc:
+            status, body = exc.status_code, {"detail": exc.detail}
+        if status < 400:
+            deleted.append({"source": source, "key": key, "result": body})
+        else:
+            failed.append({"source": source, "key": key, "status": status, "result": body})
+    return {
+        "ok": not failed,
+        "deleted": deleted,
+        "failed": failed,
+        "git_commit_required": bool(any(
+            item.get("result", {}).get("git_commit_required") for item in deleted
+        )),
+    }
+
+
 @app.get("/gallery")
 async def gallery_page():
     if not os.path.exists(GALLERY_HTML):
         raise HTTPException(status_code=404, detail="gallery.html не найден")
-    return FileResponse(GALLERY_HTML)
+    return FileResponse(
+        GALLERY_HTML,
+        headers={
+            "Cache-Control": "no-store",
+            "X-Frame-Options": "DENY",
+            "Referrer-Policy": "no-referrer",
+        },
+    )
+
+
+if os.path.isdir(GALLERY_STATIC_DIR):
+    app.mount("/gallery/static", StaticFiles(directory=GALLERY_STATIC_DIR), name="gallery-static")
 
 
 # ---------------------------------------------------------------------------
 # Публикация товаров: Directus -> страница + sitemap.xml + llms.txt
-# Тот же ключ, что у галереи (JNN_GALLERY_KEY или admin/.gallery_key).
-# Вебхук Directus дергает POST /gallery-api/publish (nginx проксирует префикс).
+#
+# Ручные вызовы под /gallery-api/* защищены админ-сессией Directus.
+# Автоматический flow Directus ходит на отдельный /webhooks/directus/publish
+# с секретом JNN_PUBLISH_WEBHOOK_SECRET (не с ключом галереи).
 # ---------------------------------------------------------------------------
 import admin.publish_product as _publish  # noqa: E402
 
 
-@app.get("/gallery-api/publish/status")
-def publish_status():
-    try:
-        return _publish.status()
-    except _publish.PublishError as exc:
-        raise HTTPException(status_code=502, detail=str(exc))
-
-
-@app.get("/gallery-api/publish/log")
-def publish_log(limit: int = 20):
-    return {"ok": True, "log": _publish.read_log(limit)}
-
-
-@app.post("/gallery-api/publish")
-async def publish_post(request: Request, x_gallery_key: str = Header(default="")):
-    _check_key(x_gallery_key)
+async def _publish_payload(request: Request) -> dict:
     # Тело принимаем «как есть»: вебхук Directus может прислать JSON-строку внутри
     # JSON или нестандартный Content-Type — тогда разбираем вручную.
     raw = (await request.body()).decode("utf-8", "replace").strip()
@@ -2256,20 +2805,54 @@ async def publish_post(request: Request, x_gallery_key: str = Header(default="")
         _publish.log_event({"ts": datetime.datetime.now().isoformat(timespec="seconds"),
                             "action": "webhook-parse", "raw": raw[:400]})
         payload = {}
+    return payload
+
+
+@app.get("/gallery-api/publish/status")
+def publish_status():
     try:
-        return _publish.api_publish(payload)
+        return _publish.status()
+    except _publish.PublishError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+
+@app.get("/gallery-api/publish/log")
+def publish_log(limit: int = 20):
+    return {"ok": True, "log": _publish.read_log(limit)}
+
+
+@app.post("/webhooks/directus/publish")
+async def publish_webhook(request: Request):
+    """Единственная точка для flow Directus; авторизация — отдельный секрет."""
+    if not PUBLISH_WEBHOOK_SECRET:
+        raise HTTPException(status_code=503, detail="Webhook-секрет не настроен")
+    supplied = request.headers.get("x-webhook-secret") or ""
+    if not supplied or not hmac.compare_digest(supplied, PUBLISH_WEBHOOK_SECRET):
+        raise HTTPException(status_code=401, detail="Неверный webhook-секрет")
+    payload = await _publish_payload(request)
+    try:
+        return await run_in_threadpool(_publish.api_publish, payload)
+    except _publish.PublishError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.post("/gallery-api/publish")
+async def publish_post(request: Request):
+    payload = await _publish_payload(request)
+    try:
+        return await run_in_threadpool(_publish.api_publish, payload)
     except _publish.PublishError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
 
 @app.post("/gallery-api/unpublish")
-def unpublish_post(payload: dict = Body(...), x_gallery_key: str = Header(default="")):
-    _check_key(x_gallery_key)
+async def unpublish_post(payload: dict = Body(...)):
     try:
-        return _publish.unpublish(
+        return await run_in_threadpool(
+            _publish.unpublish,
             str(payload.get("slug") or "").strip(),
-            force=bool(payload.get("force")),
-            dry=bool(payload.get("dry")),
+            bool(payload.get("force")),
+            bool(payload.get("dry")),
         )
     except _publish.PublishError as exc:
         raise HTTPException(status_code=400, detail=str(exc))

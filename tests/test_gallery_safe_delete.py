@@ -18,6 +18,7 @@ from admin import main as gallery_main
 
 KEY = "test-gallery-key"
 HEADERS = {"X-Gallery-Key": KEY}
+TEST_ADMIN = {"id": "test-admin", "email": "admin@example.test", "name": "Test Admin"}
 
 
 @pytest.fixture(autouse=True)
@@ -28,7 +29,16 @@ def _isolate_directus_token(monkeypatch):
 
 @pytest.fixture()
 def client(monkeypatch):
-    monkeypatch.setenv("JNN_GALLERY_KEY", KEY)
+    # API-тесты не ходят в Directus: подменяем только проверку админ-сессии,
+    # сами gallery-маршруты и их бизнес-логика остаются настоящими.
+    monkeypatch.setattr(gallery_main, "_authenticate_admin", lambda request: {
+        "type": "test", "user": TEST_ADMIN,
+    })
+    return TestClient(gallery_main.app)
+
+
+@pytest.fixture()
+def anon_client(monkeypatch):
     return TestClient(gallery_main.app)
 
 
@@ -77,9 +87,9 @@ def test_existing_name_rejects_traversal():
     assert gallery_main._existing_name("..") == ""
 
 
-def test_usage_check_requires_key(client, assets):
+def test_usage_check_requires_admin_session(anon_client, assets):
     make_file(assets)
-    response = client.get("/gallery-api/usage-check", params={"file": "photo.jpg"})
+    response = anon_client.get("/gallery-api/usage-check", params={"file": "photo.jpg"})
     assert response.status_code == 401
 
 
@@ -540,9 +550,9 @@ def test_product_usage_matches_directus_id_and_returns_slug(monkeypatch):
     assert error is None
     assert hits == ["Velvet Suit [velvet-suit]"]
 
-def test_usage_endpoint_requires_key(client, monkeypatch):
+def test_usage_endpoint_requires_admin_session(anon_client, monkeypatch):
     monkeypatch.setattr(gallery_main, "_usage_report", no_usage)
-    response = client.get("/gallery-api/usage", params={"file": "photo.jpg"})
+    response = anon_client.get("/gallery-api/usage", params={"file": "photo.jpg"})
     assert response.status_code == 401
 
 
@@ -814,15 +824,15 @@ def test_delete_blocks_file_changed_during_checks(client, assets, monkeypatch):
     assert path.exists()
 
 
-def test_delete_requires_key(client, assets):
+def test_delete_requires_admin_session(anon_client, assets):
     make_file(assets)
-    response = client.delete("/gallery-api/delete", params={"file": "photo.jpg"})
+    response = anon_client.delete("/gallery-api/delete", params={"file": "photo.jpg"})
     assert response.status_code == 401
 
 
-def test_rename_requires_key(client, assets):
+def test_rename_requires_admin_session(anon_client, assets):
     make_file(assets, "old.jpg")
-    response = client.post(
+    response = anon_client.post(
         "/gallery-api/rename",
         json={"old": "old.jpg", "new": "new.jpg"},
     )
