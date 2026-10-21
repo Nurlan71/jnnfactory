@@ -17,7 +17,7 @@ echo "1. Pull latest changes..."
 git pull origin main
 
 echo "2. Install Python dependencies..."
-pip3 install -r requirements.txt --quiet
+venv/bin/pip install -r requirements.txt --quiet
 
 echo "3. Restart admin service..."
 systemctl daemon-reload
