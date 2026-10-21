@@ -8,6 +8,8 @@
   var API = '/gallery-api';
   var AUTH = '/gallery-auth';
   var ADMIN_URL = 'https://admin.jnnfactory.online';
+  var DEFAULT_SITE_ORIGIN = 'https://jnnfactory.online';
+  var siteOrigin = DEFAULT_SITE_ORIGIN;
   var IMG_RE = /\.(jpe?g|jfif|png|webp|avif|gif|svg)$/i;
   var UPLOAD_RE = /\.(jpe?g|jfif|png|webp|avif|gif|svg)$/i;
   var ROOT = '';
@@ -479,6 +481,13 @@
 
   function itemKey(f) {
     return (f.source === 'directus' ? 'directus:' : 'local:') + (f.id || f.name);
+  }
+
+  function previewUrl(f) {
+    var url = (f && f.url) || ('/assets/' + encodeURIComponent((f && (f.id || f.name)) || ''));
+    if (f && f.source === 'directus') return url;
+    if (/^(?:https?:)?\/\//i.test(url) || /^data:/i.test(url)) return url;
+    return siteOrigin + (url.charAt(0) === '/' ? url : '/' + url);
   }
 
   function selectedItems() {
@@ -1069,12 +1078,22 @@
 
       var thumb = document.createElement('div');
       thumb.className = 'thumb';
+      var fallback = document.createElement('span');
+      fallback.className = 'thumb-fallback';
+      fallback.textContent = 'Нет превью';
+      fallback.hidden = true;
       var img = document.createElement('img');
       img.loading = 'lazy';
-      img.src = f.url || ('/assets/' + f.name);
+      img.decoding = 'async';
       img.alt = f.name;
-      img.onerror = function () { this.style.opacity = 0.25; };
+      img.onerror = function () {
+        this.hidden = true;
+        fallback.hidden = false;
+        thumb.classList.add('thumb-missing');
+      };
+      img.src = previewUrl(f);
       thumb.appendChild(img);
+      thumb.appendChild(fallback);
 
       var body = document.createElement('div');
       body.className = 'body';
@@ -1219,6 +1238,7 @@
       if (seq !== loadSeq) return;
       if (!res.ok) throw new Error('HTTP ' + res.status);
       var j = res.j || {};
+      siteOrigin = String(j.site_origin || DEFAULT_SITE_ORIGIN).replace(/\/+$/, '');
       files = (j.files || []).filter(function (f) { return IMG_RE.test(f.name); });
       media = j.directus || [];
       folders = j.folders || [];
