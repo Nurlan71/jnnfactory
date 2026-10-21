@@ -6,7 +6,7 @@
   'use strict';
 
   var API = '/gallery-api';
-  var KEY_STORE = 'jnnGalleryKey';
+  var AUTH = '/gallery-auth';
   var ADMIN_URL = 'https://admin.jnnfactory.online';
   var IMG_RE = /\.(jpe?g|jfif|png|webp|avif|gif|svg)$/i;
   var UPLOAD_RE = /\.(jpe?g|jfif|png|webp|avif|gif|svg)$/i;
@@ -22,13 +22,18 @@
   var foldersOk = true;
   var modalCleanup = null;
   var loadSeq = 0;
+  var session = null;
+  var selected = {};
+  var visibleKeys = [];
 
   var $ = function (s) { return document.querySelector(s); };
   var grid = $('#grid');
   var empty = $('#empty');
   var count = $('#count');
-  var keyInput = $('#keyInput');
-  var keyState = $('#keyState');
+  var userState = $('#userState');
+  var batchBar = $('#batchBar');
+  var batchFolder = $('#batchFolder');
+  var selCount = $('#selCount');
   var folderBar = $('#folderBar');
   var folderPath = $('#folderPath');
   var dropTarget = $('#dropTarget');
@@ -47,24 +52,109 @@
     setTimeout(function () { d.remove(); }, ms || 4500);
   }
 
-  function getKey() { return localStorage.getItem(KEY_STORE) || ''; }
+  function cookieValue(name) {
+    var parts = document.cookie ? document.cookie.split(';') : [];
+    for (var i = 0; i < parts.length; i++) {
+      var p = parts[i].trim();
+      if (p.indexOf(name + '=') === 0) return decodeURIComponent(p.slice(name.length + 1));
+    }
+    return '';
+  }
 
-  function refreshKeyState() {
-    var k = getKey();
-    keyState.textContent = k ? 'ключ сохранён' : 'ключ не задан';
-    keyState.className = 'state' + (k ? ' on' : '');
-    if (k) keyInput.value = k;
+  function csrfToken() { return cookieValue('jnn_gallery_csrf'); }
+
+  function authHeaders(extra) {
+    var h = {};
+    if (extra) Object.keys(extra).forEach(function (k) { h[k] = extra[k]; });
+    var token = csrfToken();
+    if (token) h['X-CSRF-Token'] = token;
+    return h;
+  }
+
+  function setUser(user) {
+    session = user || null;
+    if (user) {
+      userState.textContent = user.name || user.email || 'администратор';
+      userState.className = 'state on';
+    } else {
+      userState.textContent = 'не авторизован';
+      userState.className = 'state';
+    }
+  }
+
+  function showLogin(message) {
+    var screen = $('#loginScreen');
+    if (!screen) return;
+    screen.hidden = false;
+    if (message) $('#loginError').textContent = message;
+    setUser(null);
+    setTimeout(function () { var e = $('#loginEmail'); if (e) e.focus(); }, 30);
+  }
+
+  function hideLogin() {
+    var screen = $('#loginScreen');
+    if (screen) screen.hidden = true;
+    var err = $('#loginError');
+    if (err) err.textContent = '';
   }
 
   function apiFetch(url, options) {
+    options = options || {};
+    options.credentials = 'same-origin';
+    var method = String(options.method || 'GET').toUpperCase();
+    if (method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS') {
+      options.headers = authHeaders(options.headers || {});
+    }
     return fetch(url, options).then(function (r) {
       return r.text().then(function (text) {
         var j = {};
         if (text) {
           try { j = JSON.parse(text); } catch (e) { j = { detail: text.slice(0, 300) }; }
         }
+        if (r.status === 401) showLogin('Сессия истекла. Войдите заново.');
         return { status: r.status, ok: r.ok, j: j };
       });
+    });
+  }
+
+  function checkSession() {
+    return fetch(AUTH + '/me', { credentials: 'same-origin' }).then(function (r) {
+      return r.text().then(function (text) {
+        var j = {};
+        if (text) { try { j = JSON.parse(text); } catch (e) { j = {}; } }
+        if (!r.ok) throw new Error((j && j.detail) || 'Нужна авторизация');
+        return j;
+      });
+    });
+  }
+
+  function login(email, password) {
+    return fetch(AUTH + '/login', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: email, password: password })
+    }).then(function (r) {
+      return r.text().then(function (text) {
+        var j = {};
+        if (text) { try { j = JSON.parse(text); } catch (e) { j = { detail: text.slice(0, 300) }; } }
+        if (!r.ok) throw new Error((j && j.detail) || 'Не удалось войти');
+        return j;
+      });
+    });
+  }
+
+  function logout() {
+    return fetch(AUTH + '/logout', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: '{}'
+    }).then(function () {
+      setUser(null);
+      files = []; media = []; selected = {};
+      render();
+      showLogin('Вы вышли из галереи.');
     });
   }
 
@@ -378,6 +468,78 @@
     return counts;
   }
 
+  function folderChildren(parentId) {
+    var parent = parentId || '';
+    return folders.filter(function (f) { return (f.parent || '') === parent; });
+  }
+
+  function folderFileCount(id) {
+    return files.concat(media).filter(function (f) { return (f.folder_id || '') === id; }).length;
+  }
+
+  function itemKey(f) {
+    return (f.source === 'directus' ? 'directus:' : 'local:') + (f.id || f.name);
+  }
+
+  function selectedItems() {
+    var out = [];
+    files.concat(media).forEach(function (f) {
+      if (selected[itemKey(f)]) out.push(f);
+    });
+    return out;
+  }
+
+  function updateBatchBar() {
+    if (!batchBar) return;
+    var items = selectedItems();
+    batchBar.hidden = items.length === 0;
+    if (selCount) selCount.textContent = 'Выбрано: ' + items.length;
+    if (batchFolder) {
+      var current = batchFolder.value;
+      batchFolder.innerHTML = '';
+      var root = document.createElement('option');
+      root.value = '';
+      root.textContent = 'Без папки (корень)';
+      batchFolder.appendChild(root);
+      folders.forEach(function (f) {
+        var o = document.createElement('option');
+        o.value = f.id;
+        o.textContent = folderPathText(f.id);
+        batchFolder.appendChild(o);
+      });
+      batchFolder.value = current || '';
+    }
+    var all = $('#selectAll');
+    if (all) {
+      var visible = visibleKeys.filter(function (k) { return !!selected[k]; }).length;
+      all.checked = visibleKeys.length > 0 && visible === visibleKeys.length;
+      all.indeterminate = visible > 0 && visible < visibleKeys.length;
+    }
+  }
+
+  function addFolderCard(name, id, countValue) {
+    var card = document.createElement('div');
+    card.className = 'folder-card';
+    card.tabIndex = 0;
+    card.setAttribute('role', 'button');
+    var icon = document.createElement('div');
+    icon.className = 'ficon';
+    icon.textContent = '📁';
+    var title = document.createElement('div');
+    title.className = 'fname';
+    title.textContent = name;
+    var note = document.createElement('div');
+    note.className = 'fcount';
+    note.textContent = countValue + ' файл(ов)';
+    card.appendChild(icon);
+    card.appendChild(title);
+    card.appendChild(note);
+    var open = function () { setFolder(id); };
+    card.addEventListener('click', open);
+    card.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } });
+    grid.appendChild(card);
+  }
+
   function addFolderChip(label, id, countValue, active) {
     var b = document.createElement('button');
     b.type = 'button';
@@ -396,10 +558,22 @@
     var counts = folderCounts();
     addFolderChip('Все файлы', ALL, files.length + media.length, currentFolder === ALL);
     addFolderChip('Без папки', ROOT, counts[ROOT] || 0, currentFolder === ROOT);
-    folders.forEach(function (f) {
-      addFolderChip(folderPathText(f.id), f.id, counts[f.id] || 0, currentFolder === f.id);
+    if (currentFolder !== ALL && currentFolder !== ROOT) {
+      var back = document.createElement('button');
+      back.type = 'button';
+      back.className = 'chip';
+      back.textContent = '← Наверх';
+      back.addEventListener('click', function () {
+        var item = folderById(currentFolder);
+        setFolder(item && item.parent ? item.parent : ALL);
+      });
+      folderBar.appendChild(back);
+    }
+    var parent = (currentFolder === ALL || currentFolder === ROOT) ? '' : currentFolder;
+    folderChildren(parent).forEach(function (f) {
+      addFolderChip(f.name, f.id, counts[f.id] || 0, false);
     });
-    if (currentFolder === ALL) folderPath.textContent = 'Показаны все файлы, включая папки';
+    if (currentFolder === ALL) folderPath.textContent = 'Показаны все файлы; папки — в корне галереи';
     else if (currentFolder === ROOT) folderPath.textContent = 'Показаны файлы без папки';
     else folderPath.textContent = 'Папка: ' + folderPathText(currentFolder);
     if (dropTarget) {
@@ -428,14 +602,12 @@
   }
 
   function createFolder() {
-    var k = getKey();
-    if (!k) { toast('Сначала задайте ключ доступа', true); return; }
     var name = prompt('Название новой папки:');
     if (!name || !name.trim()) return;
     var parent = (currentFolder && currentFolder !== ALL && currentFolder !== ROOT) ? currentFolder : '';
     apiFetch(API + '/folders', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Gallery-Key': k },
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ name: name.trim(), parent: parent })
     }).then(function (res) {
       if (!res.ok) throw new Error((res.j && res.j.detail) || 'ошибка');
@@ -445,8 +617,6 @@
   }
 
   function moveFile(f) {
-    var k = getKey();
-    if (!k) { toast('Сначала задайте ключ доступа', true); return; }
     var select = document.createElement('select');
     select.className = 'move-select';
     var root = document.createElement('option');
@@ -473,7 +643,7 @@
           var key = source === 'directus' ? f.id : f.name;
           apiFetch(API + '/folders/move', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-Gallery-Key': k },
+            headers: authHeaders({ 'Content-Type': 'application/json' }),
             body: JSON.stringify({ source: source, key: key, folder_id: select.value })
           }).then(function (res) {
             if (!res.ok) throw new Error((res.j && res.j.detail) || 'ошибка');
@@ -492,11 +662,10 @@
   }
 
   function performDelete(f, force) {
-    var k = getKey();
     var url = f.source === 'directus'
       ? API + '/media/' + encodeURIComponent(f.id) + '?force=' + (force ? 'true' : 'false')
       : API + '/delete?file=' + encodeURIComponent(f.name) + '&force=' + (force ? 'true' : 'false');
-    apiFetch(url, { method: 'DELETE', headers: { 'X-Gallery-Key': k } }).then(function (res) {
+    apiFetch(url, { method: 'DELETE', headers: authHeaders() }).then(function (res) {
       if (!res.ok) {
         if (res.status === 409 && res.j && res.j.can_force && !force) {
           forceModal(f, res.j, 'Удалить принудительно', function () { performDelete(f, true); });
@@ -512,9 +681,7 @@
   }
 
   function deleteFile(f) {
-    var k = getKey();
-    if (!k) { toast('Сначала задайте ключ доступа', true); return; }
-    apiFetch(usageUrl(f), { headers: { 'X-Gallery-Key': k } }).then(function (res) {
+    apiFetch(usageUrl(f), { headers: authHeaders() }).then(function (res) {
       var j = res.j || {};
       if (res.status === 503 || j.available === false) {
         showErrorModal('Не удалось проверить файл', j, f);
@@ -540,15 +707,76 @@
     }).catch(function (e) { toast('Не удалось проверить файл: ' + e.message, true); });
   }
 
+  function batchTargets(items) {
+    return items.map(function (f) {
+      return {
+        source: f.source === 'directus' ? 'directus' : 'local',
+        key: f.source === 'directus' ? f.id : f.name
+      };
+    });
+  }
+
+  function runBatchDelete(items, force) {
+    apiFetch(API + '/batch/delete', {
+      method: 'POST',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ items: batchTargets(items), force: !!force })
+    }).then(function (res) {
+      if (res.status === 409 && res.j && res.j.can_force && !force) {
+        var blocked = res.j.blocked || [];
+        var text = blocked.slice(0, 8).map(function (x) { return x.name || x.key; }).join('\n');
+        if (confirm('Эти файлы используются или отслеживаются Git:\n\n' + text +
+          '\n\nУдалить принудительно? Действие нельзя отменить.')) {
+          runBatchDelete(items, true);
+        }
+        return;
+      }
+      if (!res.ok) {
+        toast('Массовое удаление: ' + ((res.j && res.j.detail) || ('HTTP ' + res.status)), true);
+        return;
+      }
+      var deleted = (res.j && res.j.deleted) || [];
+      var failed = (res.j && res.j.failed) || [];
+      toast('Удалено: ' + deleted.length + (failed.length ? ', ошибок: ' + failed.length : ''), failed.length > 0);
+      if (res.j && res.j.git_commit_required) showGitCommitModal('выбранные файлы', 'delete');
+      selected = {};
+      load();
+    }).catch(function (e) { toast('Массовое удаление: ' + e.message, true); });
+  }
+
+  function batchDelete() {
+    var items = selectedItems();
+    if (!items.length) { toast('Ничего не выбрано', true); return; }
+    if (!confirm('Удалить выбранные файлы (' + items.length + ')? Сначала будет проверено использование и Git.')) return;
+    runBatchDelete(items, false);
+  }
+
+  function batchMove() {
+    var items = selectedItems();
+    if (!items.length) { toast('Ничего не выбрано', true); return; }
+    var folderId = batchFolder ? batchFolder.value : '';
+    var label = folderId ? folderPathText(folderId) : 'корень (без папки)';
+    if (!confirm('Переместить выбранные файлы (' + items.length + ') в «' + label + '»?')) return;
+    apiFetch(API + '/batch/move', {
+      method: 'POST',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ items: batchTargets(items), folder_id: folderId })
+    }).then(function (res) {
+      if (!res.ok) throw new Error((res.j && res.j.detail) || ('HTTP ' + res.status));
+      toast('Перемещено файлов: ' + (res.j.moved || items.length));
+      selected = {};
+      load();
+    }).catch(function (e) { toast('Не удалось переместить: ' + e.message, true); });
+  }
+
   function performRename(f, next, force) {
-    var k = getKey();
     var url = f.source === 'directus' ? API + '/media/rename' : API + '/rename';
     var payload = f.source === 'directus'
       ? { id: f.id, new: next, force: !!force }
       : { old: f.name, new: next, force: !!force };
     apiFetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Gallery-Key': k },
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(payload)
     }).then(function (res) {
       if (!res.ok) {
@@ -566,12 +794,10 @@
   }
 
   function renameFile(f) {
-    var k = getKey();
-    if (!k) { toast('Сначала задайте ключ доступа', true); return; }
     var next = prompt('Новое имя файла (с расширением):', f.name);
     if (!next || next.trim() === f.name) return;
     next = next.trim();
-    apiFetch(usageUrl(f), { headers: { 'X-Gallery-Key': k } }).then(function (res) {
+    apiFetch(usageUrl(f), { headers: authHeaders() }).then(function (res) {
       var j = res.j || {};
       if (res.status === 503 || j.available === false) {
         showErrorModal('Не удалось проверить файл', j, f);
@@ -594,8 +820,6 @@
   }
 
   function autoNameMedia(f) {
-    var k = getKey();
-    if (!k) { toast('Сначала задайте ключ доступа', true); return; }
     if (!f.products || !f.products.length) {
       toast('Сначала привяжите файл к товару в Directus', true);
       return;
@@ -607,7 +831,7 @@
     function run(force) {
       apiFetch(API + '/media/auto-name', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Gallery-Key': k },
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ id: f.id, product: productValue, force: !!force })
       }).then(function (res) {
         if (!res.ok) {
@@ -626,12 +850,10 @@
   }
 
   function usageToast(f) {
-    var k = getKey();
-    if (!k) { toast('Сначала задайте ключ доступа', true); return; }
     var url = f.source === 'directus'
       ? API + '/usage?id=' + encodeURIComponent(f.id)
       : API + '/usage?file=' + encodeURIComponent(f.name);
-    apiFetch(url, { headers: { 'X-Gallery-Key': k } }).then(function (res) {
+    apiFetch(url, { headers: authHeaders() }).then(function (res) {
       if (!res.ok) {
         toast('Не удалось проверить: ' + ((res.j && res.j.detail) || ('HTTP ' + res.status)), true);
         return;
@@ -709,8 +931,6 @@
 
   function uploadProduct() {
     if (productUploadBtn.disabled) return;
-    var k = getKey();
-    if (!k) { toast('Сначала задайте ключ доступа', true); return; }
     var file = productFile.files && productFile.files[0];
     if (!file) { toast('Выберите файл', true); return; }
     var product = productSelect.value;
@@ -728,7 +948,7 @@
     productUploadBtn.disabled = true;
     apiFetch(API + '/upload-product', {
       method: 'POST',
-      headers: { 'X-Gallery-Key': k },
+      headers: authHeaders(),
       body: fd
     }).then(function (res) {
       productUploadBtn.disabled = false;
@@ -747,8 +967,6 @@
   }
 
   function upload(list) {
-    var k = getKey();
-    if (!k) { toast('Сначала задайте ключ доступа', true); return; }
     var items = [], bad = [];
     Array.prototype.forEach.call(list, function (f) {
       if (!f) return;
@@ -768,7 +986,7 @@
     var folderId = currentFolderForUpload();
     if (folderId) fd.append('folder_id', folderId);
     toast('Загрузка: ' + items.length + ' файл(ов)...');
-    fetch(API + '/upload', { method: 'POST', headers: { 'X-Gallery-Key': k }, body: fd })
+    fetch(API + '/upload', { method: 'POST', headers: authHeaders(), body: fd })
       .then(function (r) {
         if (r.status === 413) throw new Error('файл слишком большой для сервера (лимит 64 МБ на запрос)');
         return r.json().then(function (j) { return { ok: r.ok, j: j }; });
@@ -805,17 +1023,24 @@
       return a.name.localeCompare(b.name, 'ru');
     });
 
+    var parent = (currentFolder === ALL || currentFolder === ROOT) ? '' : currentFolder;
+    var childFolders = q ? [] : folderChildren(parent);
     grid.innerHTML = '';
+    visibleKeys = list.map(itemKey);
     count.textContent = 'файлов: ' + list.length + ' из ' + all.length +
       (media.length ? ' · медиатека: ' + media.length : '') +
       (mediaWritable ? ' · Directus: токен задан' : ' · Directus только чтение');
     renderFolderBar();
+    childFolders.forEach(function (folder) {
+      addFolderCard(folder.name, folder.id, folderFileCount(folder.id));
+    });
 
-    if (!list.length) {
+    if (!list.length && !childFolders.length) {
       empty.hidden = false;
       empty.textContent = currentFolder === ALL || currentFolder === ROOT
-        ? 'В этой папке пока нет файлов.'
+        ? 'Здесь пока нет файлов. Создайте папку или загрузите изображения.'
         : 'В папке «' + folderPathText(currentFolder) + '» пока нет файлов.';
+      updateBatchBar();
       return;
     }
     empty.hidden = true;
@@ -823,7 +1048,24 @@
     list.forEach(function (f) {
       var isMedia = f.source === 'directus';
       var card = document.createElement('div');
-      card.className = 'card';
+      card.className = 'card' + (selected[itemKey(f)] ? ' selected' : '');
+
+      var pick = document.createElement('label');
+      pick.className = 'pick';
+      pick.title = 'Выбрать для массового действия';
+      var cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = !!selected[itemKey(f)];
+      cb.setAttribute('aria-label', 'Выбрать ' + f.name);
+      cb.addEventListener('click', function (e) { e.stopPropagation(); });
+      cb.addEventListener('change', function () {
+        if (cb.checked) selected[itemKey(f)] = true;
+        else delete selected[itemKey(f)];
+        card.classList.toggle('selected', cb.checked);
+        updateBatchBar();
+      });
+      pick.appendChild(cb);
+      card.appendChild(pick);
 
       var thumb = document.createElement('div');
       thumb.className = 'thumb';
@@ -968,6 +1210,7 @@
       card.appendChild(body);
       grid.appendChild(card);
     });
+    updateBatchBar();
   }
 
   function load() {
@@ -985,6 +1228,11 @@
       if (currentFolder !== ALL && currentFolder !== ROOT && !folderById(currentFolder)) {
         currentFolder = ALL;
       }
+      var live = {};
+      files.concat(media).forEach(function (f) { live[itemKey(f)] = true; });
+      Object.keys(selected).forEach(function (key) {
+        if (!live[key]) delete selected[key];
+      });
       renderProductSelect();
       render();
       if (j.media_ok === false) toast('Медиатека Directus сейчас недоступна — показаны только файлы сайта', true);
@@ -1004,12 +1252,43 @@
   $('#createFolderBtn').addEventListener('click', createFolder);
   $('#allFilesBtn').addEventListener('click', function () { setFolder(ALL); });
   $('#rootFilesBtn').addEventListener('click', function () { setFolder(ROOT); });
-  $('#keyBtn').addEventListener('click', function () {
-    var v = keyInput.value.trim();
-    if (!v) { localStorage.removeItem(KEY_STORE); refreshKeyState(); toast('Ключ удалён'); return; }
-    localStorage.setItem(KEY_STORE, v);
-    refreshKeyState();
-    toast('Ключ сохранён');
+
+  $('#loginForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var email = $('#loginEmail').value.trim();
+    var password = $('#loginPassword').value;
+    var btn = $('#loginBtn');
+    var err = $('#loginError');
+    err.textContent = '';
+    btn.disabled = true;
+    btn.textContent = 'Проверка…';
+    login(email, password).then(function (res) {
+      setUser(res.user);
+      hideLogin();
+      toast('Вы вошли как ' + (res.user.name || res.user.email));
+      return load();
+    }).catch(function (ex) {
+      err.textContent = ex.message || 'Не удалось войти';
+    }).then(function () {
+      btn.disabled = false;
+      btn.textContent = 'Войти';
+    });
+  });
+
+  $('#logoutBtn').addEventListener('click', logout);
+  $('#batchDeleteBtn').addEventListener('click', batchDelete);
+  $('#batchMoveBtn').addEventListener('click', batchMove);
+  $('#batchClearBtn').addEventListener('click', function () {
+    selected = {};
+    render();
+  });
+  $('#selectAll').addEventListener('change', function (e) {
+    var on = e.target.checked;
+    visibleKeys.forEach(function (key) {
+      if (on) selected[key] = true;
+      else delete selected[key];
+    });
+    render();
   });
 
   productTarget.addEventListener('change', function () {
@@ -1040,6 +1319,15 @@
     upload(e.clipboardData.files);
   });
 
-  refreshKeyState();
-  load();
+  function bootstrap() {
+    checkSession().then(function (res) {
+      setUser(res.user);
+      hideLogin();
+      return load();
+    }).catch(function () {
+      showLogin('Войдите под аккаунтом администратора Directus.');
+    });
+  }
+
+  bootstrap();
 })();
