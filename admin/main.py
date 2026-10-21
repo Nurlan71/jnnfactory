@@ -224,6 +224,7 @@ def _check_key(key: Optional[str]) -> None:
 # токены Directus остаются в памяти процесса.
 # ---------------------------------------------------------------------------
 ADMIN_ORIGIN = (os.environ.get("JNN_ADMIN_ORIGIN") or "https://admin.jnnfactory.online").rstrip("/")
+SITE_ORIGIN = (os.environ.get("JNN_SITE_URL") or "https://jnnfactory.online").rstrip("/")
 SESSION_COOKIE = "jnn_gallery_sid"
 CSRF_COOKIE = "jnn_gallery_csrf"
 SESSION_IDLE = 8 * 3600
@@ -1387,6 +1388,7 @@ async def gallery_list():
             )
         return {
             "count": len(items),
+            "site_origin": SITE_ORIGIN,
             "files": items,
             "directus": media,
             "media_ok": raw is not None,

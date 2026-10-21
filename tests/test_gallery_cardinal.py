@@ -591,3 +591,18 @@ def test_list_exposes_product_catalog_and_media_write_state(client, assets, monk
     assert body["product_catalog"][0]["slug"] == "velvet-suit"
     assert body["directus"][0]["deletable"] is True
     assert body["folders"] == []
+
+
+def test_list_exposes_site_origin_for_local_previews(client, assets, monkeypatch):
+    make_file(assets, "local.jpg")
+    monkeypatch.setattr(gallery_main, "_git_tracked_assets", lambda: set())
+    monkeypatch.setattr(gallery_main, "_directus_images", lambda: [])
+    monkeypatch.setattr(gallery_main, "_directus_product_records", lambda: ([], None))
+    monkeypatch.setattr(gallery_main, "SITE_ORIGIN", "https://shop.example")
+
+    response = client.get("/gallery-api/list")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["site_origin"] == "https://shop.example"
+    assert body["files"][0]["url"] == "/assets/local.jpg"
